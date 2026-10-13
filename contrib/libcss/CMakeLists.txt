@@ -222,8 +222,6 @@ add_library(css ${WISP_LIB_TYPE}
 	src/parse/properties/flex_flow.c
 	src/parse/properties/gap.c
 	src/parse/properties/inset.c
-	src/parse/properties/inset_block.c
-	src/parse/properties/inset_inline.c
 	src/parse/properties/place_content.c
 	src/parse/properties/font.c
 	src/parse/properties/font_family.c

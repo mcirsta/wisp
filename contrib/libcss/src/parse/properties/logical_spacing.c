@@ -45,12 +45,12 @@ fail:
 
 css_error css__parse_margin_block(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
 {
-    return parse_pair(c, vector, ctx, result, css__parse_margin_top, css__parse_margin_bottom);
+    return parse_pair(c, vector, ctx, result, css__parse_margin_block_start, css__parse_margin_block_end);
 }
 
 css_error css__parse_padding_block(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
 {
-    return parse_pair(c, vector, ctx, result, css__parse_padding_top, css__parse_padding_bottom);
+    return parse_pair(c, vector, ctx, result, css__parse_padding_block_start, css__parse_padding_block_end);
 }
 
 css_error css__parse_margin_inline(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
@@ -61,4 +61,14 @@ css_error css__parse_margin_inline(css_language *c, const parserutils_vector *ve
 css_error css__parse_padding_inline(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
 {
     return parse_pair(c, vector, ctx, result, css__parse_padding_left, css__parse_padding_right);
+}
+
+css_error css__parse_inset_block(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
+{
+    return parse_pair(c, vector, ctx, result, css__parse_inset_block_start, css__parse_inset_block_end);
+}
+
+css_error css__parse_inset_inline(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
+{
+    return parse_pair(c, vector, ctx, result, css__parse_left, css__parse_right);
 }

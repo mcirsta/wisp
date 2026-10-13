@@ -58,7 +58,8 @@ math readback/edit preservation as `facb2b04`, and native calculation precision
 as `840e2aea`. Non-finite calculations, shared simplification and generated
 property ranges are committed as `ed93be8d`; supported font/decoration identities
 as `908448f1`, independent background repeat axes as `03a81fd7`, and
-background position axes as `090573ab`.
+background position axes as `090573ab`, and white-space decomposition as
+`6b5f2d7b`.
 Earlier dated sections are historical records, not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
@@ -84,7 +85,10 @@ the target. Each group can require more than one tested batch:
   `font-variant-caps` and `text-decoration-line` longhands, sharing native
   parsing/cascade storage. Background repeat and position axes now have independent
   native lists, cascade and declaration edits. White-space now decomposes into
-  independent collapse/wrapping longhands. Logical start/end identities remain.
+  independent collapse/wrapping longhands. Block start/end registrations are complete
+  for the existing margin/padding/inset pairs. The six inline start/end names
+  still need direction-aware cascade mapping; their existing shorthands currently
+  map to left/right too early for RTL. This is part of the same group.
   Full new font/decoration grammars are
   not prerequisites for this target.
   Pending-substitution preservation has native edit coverage. Correction to
@@ -105,7 +109,7 @@ the target. Each group can require more than one tested batch:
 The earlier estimate of roughly 8–15 focused batches is a planning estimate,
 not a delivery guarantee. Property-family registrations are a coverage aid,
 not a percentage-complete measure: families can still have unsupported value
-forms. All 193 property registrations now have a family; this closes the
+forms. All 195 property registrations now have a family; this closes the
 unregistered-family work, not the remaining value forms or live binding.
 Update this list as groups finish. Keep
 optional rendering discoveries in `src/docs/layout-correctness.md` unless they
@@ -2806,6 +2810,53 @@ are not Chromium snapshots. The cross-node case uses matching text-run boundarie
 to avoid unrelated fractional glyph-rasterization differences. GTK/Windows were
 not built. Duktape's previously reviewed placeholder style getter supplies no
 additional implementation to reuse for this declaration-layer work.
+
+
+### Block-edge registrations and shared logical pair parsing (2026-10-13)
+
+Committed white-space decomposition as `6b5f2d7b`. `inset-block-start` and
+`inset-block-end` now have generated parse handlers and distinct declaration
+registrations. The existing `inset-block` shorthand had these member names in
+metadata, but neither name could be parsed on its own. A partial CSSOM edit or
+removal could therefore serialize a remaining inset that could not be reparsed.
+The new registrations close that gap and render directly authored longhands.
+In the current horizontal-tb engine the block mapping is top/bottom for LTR and
+RTL, following [CSS Logical Properties, offsets](https://drafts.csswg.org/css-logical-1/#inset-properties).
+They share existing native slots without adding computed-style memory.
+
+All six margin/padding/inset axis shorthands now share the atomic pair parser;
+the two duplicated inset parser source files are removed. Block shorthands call
+the generated block longhands. The generator now requires block members to be
+registered, with its temporary missing-member exception restricted to the three
+existing inline pairs. CSSOM still preserves logical names, independent values,
+priority and ordering across physical declarations. Invalid pair tests protect
+existing behavior: investigation initially suspected mixed CSS-wide acceptance,
+but the pre-change capture and generated side-value helper confirm it was already
+rejected. The consolidation additionally makes allocation rollback consistent.
+
+The pre-change Qt check reproduced three failures: ignored individual block
+insets left empty absolute boxes at height zero, and a longhand override failed
+to change a shorthand's bottom offset. The updated fixture checks all original
+15 spacing boxes plus seven positioned boxes, including RTL, physical override,
+importance, var()/calc(), and malformed block/inline pairs. Native tests cover
+literal/deferred stylesheet and inline cascade, inheritance, origin revert,
+invalid-at-computed-value behavior, specified readback/reparse, mixed priorities,
+partial edits/removals, and failure at every emitted word of all six pair parsers.
+All 76 selected native suites and seven Qt suites pass in both Release and Debug;
+native ASan/UBSan/LSan checks are clean. The Qt set also covers absolute sizing,
+absolute images, aspect ratio, logical alignment, position values and retained
+restyling. Both builds are warning-free; GTK/Windows were not built.
+
+Inline start/end mapping remains the next prerequisite, not a newly expanded
+backlog: margin, padding and inset each have two names not yet independently
+registered. Correct mapping must use the element/pseudo's final direction,
+including inherited direction, late rules, variables and revert, while logical
+and physical declarations compete in the same cascade. Libcss currently selects
+partial styles before parent composition; simply adding left/right parse aliases
+would repeat the existing RTL error. Keep that dependency explicit in the next
+batch. Vertical writing modes and additional logical property families remain
+outside this checklist. No new JS API is exposed by this batch; the Duktape
+placeholder style getter offers no implementation to reuse here.
 
 ## Assessment
 

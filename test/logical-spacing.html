@@ -23,3 +23,17 @@ section { margin:16px 0; border:1px solid #aaa; padding:8px; }
 <section>Invalid second value preserves previous declaration<div id="invalid" class="probe" style="padding-block:10px;padding-block:20px -2px"></div></section>
 <section>Ratio includes border-box logical padding<div id="ratio" class="probe" style="box-sizing:border-box;width:200px;height:auto;aspect-ratio:2;padding-block:10px 20px;padding-inline:5px;border:2px solid"></div></section>
 <section>Tailwind-style border-box header<div id="header" style="--spacing:4px;box-sizing:border-box;width:400px;display:flex;align-items:center;padding-block:calc(var(--spacing)*5);padding-inline:calc(var(--spacing)*4)"><div style="width:200px;height:56px;background:#bcd"></div></div></section>
+
+<style>
+.inset-frame { position:relative; width:200px; height:120px; background:#eee; }
+.inset-frame > div { position:absolute; left:0; width:40px; background:#246; }
+</style>
+<!-- Block edges have the same mapping in horizontal LTR and RTL. The test
+     compares position within each containing block, avoiding font baselines. -->
+<section>Logical block offsets<div id="inset-frame" class="inset-frame"><div id="inset-edges" style="inset-block-start:11px;inset-block-end:17px"></div></div></section>
+<section>RTL block offsets<div id="inset-rtl-frame" class="inset-frame"><div id="inset-rtl" style="inset-block:11px 17px;direction:rtl"></div></div></section>
+<section>Logical end overrides shorthand<div id="inset-variable-frame" class="inset-frame"><div id="inset-variable" style="--edges:11px 17px;inset-block:var(--edges);inset-block-end:calc(20px + 3px)"></div></div></section>
+<section>Physical top overrides logical start<div id="inset-physical-frame" class="inset-frame"><div id="inset-physical" style="inset-block:11px 17px;top:23px"></div></div></section>
+<section>Important logical start wins<div id="inset-important-frame" class="inset-frame"><div id="inset-important" style="inset-block-start:11px!important;top:23px;inset-block-end:17px"></div></div></section>
+<section>Invalid mixed CSS-wide pair is ignored<div id="inset-invalid-frame" class="inset-frame"><div id="inset-invalid" style="inset-block:11px 17px;inset-block:1px inherit"></div></div></section>
+<section>Inline pair rejects the same invalid syntax<div id="inline-invalid-frame" class="inset-frame"><div id="inline-invalid" style="width:auto;top:0;height:40px;inset-inline:5px 7px;inset-inline:1px initial"></div></div></section>

@@ -69,6 +69,25 @@ class DeclarationMetadataTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'white_space: declaration_value requires ordered members'):
             self.reader.validate_declarations()
 
+    def test_block_edge_identities(self):
+        dispatch = {prop['name'] for prop in self.reader.get_dispatch_order()}
+        for group in ('margin', 'padding', 'inset'):
+            name = group + '_block'
+            self.assertEqual(self.reader.toml_data[name]['declaration_longhands'],
+                             [name + '_start', name + '_end'])
+            for edge, physical in (('start', 'top'), ('end', 'bottom')):
+                member = name + '_' + edge
+                prop = self.reader.toml_data[member]
+                target = physical if group == 'inset' else group + '_' + physical
+                self.assertEqual(prop['enum'], self.reader.toml_data[target]['enum'])
+                self.assertEqual(prop['logical_group'], group)
+                self.assertTrue(prop['logical'])
+                self.assertNotIn(member, dispatch)
+                self.assertNotIn(member.replace('_', '-'), self.reader.get_legacy_aliases())
+        del self.reader.toml_data['inset_block_start']
+        with self.assertRaisesRegex(ValueError, 'inset_block: unknown longhand'):
+            self.reader.validate_declarations()
+
     def test_legacy_alias_validation(self):
         for aliases in ("grid-gap", [1], ["GRID-GAP"], ["grid_gap"], ["--gap"], ["gríd-gap"],
                         ["gap"], ["row-gap"], ["grid-row-gap"], ["grid-gap", "grid-gap"]):

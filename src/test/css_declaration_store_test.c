@@ -109,6 +109,16 @@ static void check_order(const css_declaration_store *store, const char *names)
 static const struct {
     const char *initial, *assignment, *expected, *order;
 } assignments[] = {
+    {"inset-block:1px 2px;color:red", "inset-block-start:3px", "inset-block: 3px 2px; color: red;",
+        "inset-block-start inset-block-end color"},
+    {"inset-block:1px 2px;color:red", "inset-block-end:auto", "inset-block: 1px auto; color: red;",
+        "inset-block-start inset-block-end color"},
+    {"inset-block-start:1px;top:2px;color:red", "inset-block-start:3px",
+        "top: 2px; color: red; inset-block-start: 3px;", "top color inset-block-start"},
+    {"top:1px;inset-block-start:2px;color:red", "top:3px",
+        "inset-block-start: 2px; color: red; top: 3px;", "inset-block-start color top"},
+    {"inset-block:var(--I);color:red", "inset-block-end:auto",
+        "inset-block-start: ; inset-block-end: auto; color: red;", "inset-block-start inset-block-end color"},
     {"font:italic small-caps 16px/1.5 serif;color:red", "font-variant-caps:normal",
         "font: italic 16px / 1.5 serif; color: red;",
         "font-style font-variant-caps font-weight font-size line-height font-family color"},
@@ -188,6 +198,9 @@ static const struct {
     const char *initial, *name, *old_value, *expected;
     bool important, changed;
 } removals[] = {
+    {"inset-block:1px 2px!important;color:red", "INSET-BLOCK-START", "1px",
+        "inset-block-end: 2px !important; color: red;", true, true},
+    {"inset-block-start:1px;color:red", "inset-block", "", "color: red;", false, true},
     {"font-variant:small-caps!important;color:red", "font-variant-caps", "small-caps", "color: red;", true, true},
     {"font-variant-caps:small-caps!important;color:red", "font-variant", "small-caps", "color: red;", true, true},
     {"font:italic small-caps 16px serif;color:red", "font-variant-caps", "small-caps",

@@ -261,10 +261,10 @@ class TomlPropertyReader:
                     raise ValueError(f"{name}: invalid longhand {member}")
                 target = self.toml_data.get(member)
                 if target is None:
-                    # The current horizontal renderer implements some logical
-                    # pairs only as shorthands. Metadata must keep the standard
-                    # start/end identities rather than call them left/right.
-                    if not prop.get('logical') or member not in (name + '_start', name + '_end'):
+                    # Only the existing inline pairs lack individual handlers;
+                    # their direction-aware mapping remains separate work.
+                    if (not prop.get('logical') or name not in ('margin_inline', 'padding_inline', 'inset_inline') or
+                            member not in (name + '_start', name + '_end')):
                         raise ValueError(f"{name}: unknown longhand {member}")
                 elif target.get('declaration_longhands'):
                     raise ValueError(f"{name}: nested shorthand {member}; list its components")

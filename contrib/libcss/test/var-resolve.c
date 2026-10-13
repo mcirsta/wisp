@@ -2114,6 +2114,79 @@ static void test_background_position_axes(void)
     }
 }
 
+/* CSS Logical 1: block edges map to top/bottom in horizontal-tb for both
+ * directions. Physical and logical declarations still compete in one cascade. */
+static void test_block_inset_longhands(void)
+{
+    static const struct { const char *css; int top, bottom; bool automatic; } cases[] = {
+        {"inset-block-start:11px;inset-block-end:17px", 11, 17},
+        {"direction:rtl;inset-block-start:11px;inset-block-end:17px", 11, 17},
+        {"inset-block:11px 17px;inset-block-start:23px", 23, 17},
+        {"inset-block-start:23px;inset-block:11px 17px", 11, 17},
+        {"inset-block-start:11px;top:23px;inset-block-end:17px", 23, 17},
+        {"top:23px;inset-block-start:11px;inset-block-end:17px", 11, 17},
+        {"inset-block-start:11px!important;top:23px;inset-block-end:17px", 11, 17},
+        {"top:23px!important;inset-block:11px 17px", 23, 17},
+        {"--edges:11px 17px;inset-block:var(--edges);inset-block-end:23px", 11, 23},
+        {"--edge:13px;inset-block-start:calc(var(--edge) + 2px);inset-block-end:-17px", 15, -17},
+        {"inset-block:11px 17px;inset-block:1px inherit", 11, 17},
+        {"inset-block:11px 17px;inset-block:1px initial", 11, 17},
+        {"inset-block:11px 17px;inset-block-start:initial", 0, 17, true},
+        {"inset-block:11px 17px;inset-block-start:unset", 0, 17, true},
+        {"inset-block:11px 17px;inset-block-start:var(--missing)", 0, 17, true},
+        {"--bad:1px inherit;inset-block:11px 17px;inset-block:var(--bad);inset-block-end:17px", 0, 17, true},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        for (unsigned inlined = 0; inlined < 2; inlined++) {
+            char declarations[512], css[520];
+            snprintf(declarations, sizeof(declarations), "position:absolute;%s", cases[i].css);
+            snprintf(css, sizeof(css), "div {%s}", declarations);
+            style_case ctx;
+            setup_style_case(&ctx, inlined ? "" : css);
+            if (inlined)
+                ctx.inline_style = create_stylesheet_from_css(declarations, true, false);
+            const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, ctx.inline_style, &ctx.results);
+            if (cases[i].automatic)
+                expect_length_type(css, style, css_computed_top, CSS_TOP_AUTO);
+            else
+                expect_length_px(css, style, css_computed_top, CSS_TOP_SET, cases[i].top);
+            expect_length_px(css, style, css_computed_bottom, CSS_BOTTOM_SET, cases[i].bottom);
+            destroy_style_case(&ctx);
+        }
+    }
+    const char *const children[] = {"inset-block:inherit", "inset-block-start:inherit;inset-block-end:inherit",
+        "inset-block-start:var(--missing,inherit);inset-block-end:inherit"};
+    for (size_t i = 0; i < sizeof(children) / sizeof(children[0]); i++) {
+        style_case p, c;
+        const css_computed_style *parent = select_style_from_css("div {position:absolute;top:11px;bottom:17px}", &p);
+        char css[256];
+        snprintf(css, sizeof(css), "div {position:absolute;%s}", children[i]);
+        setup_style_case(&c, css);
+        c.node.parent = &p.node;
+        const css_computed_style *child = select_style_for_node(&c, &c.node, NULL, &c.results);
+        css_computed_style *composed;
+        assert(css_computed_style_compose(parent, child, &unit_ctx, &composed) == CSS_OK);
+        destroy_style_case(&c);
+        destroy_style_case(&p);
+        expect_length_px(children[i], composed, css_computed_top, CSS_TOP_SET, 11);
+        expect_length_px(children[i], composed, css_computed_bottom, CSS_BOTTOM_SET, 17);
+        css_computed_style_destroy(composed);
+    }
+    for (unsigned deferred = 0; deferred < 2; deferred++) {
+        style_case ctx;
+        setup_style_case(&ctx, deferred ?
+            "div {position:absolute;inset-block:11px 17px;inset-block-start:var(--missing,revert)}" :
+            "div {position:absolute;inset-block:11px 17px;inset-block-start:revert}");
+        css_stylesheet *user = create_stylesheet_from_css("div {top:3px;bottom:5px}", false, false);
+        assert(css_select_ctx_insert_sheet(ctx.select_ctx, user, 0, CSS_ORIGIN_USER, NULL) == CSS_OK);
+        const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+        expect_length_px("logical revert top", style, css_computed_top, CSS_TOP_SET, 3);
+        expect_length_px("logical revert bottom", style, css_computed_bottom, CSS_BOTTOM_SET, 17);
+        destroy_style_case(&ctx);
+        css_stylesheet_destroy(user);
+    }
+}
+
 /* CSS Text 4: collapse and wrapping have independent inherited cascades. */
 static void expect_white_space(const css_computed_style *style, unsigned collapse, unsigned wrap, const char *css)
 {
@@ -2432,6 +2505,7 @@ int main(int argc, char **argv)
     test_background_repeat_axes();
     test_background_position_axes();
     test_white_space_longhands();
+    test_block_inset_longhands();
     test_aggregate_longhand_values();
     test_gap_aliases();
     test_deferred_revert();

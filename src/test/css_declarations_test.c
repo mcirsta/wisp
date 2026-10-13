@@ -485,6 +485,8 @@ static const struct {
         {"inline-size", "height", "block-size", "width"}, {1, 2, 3, 4}, {0, 0, 0, 0}},
     {"margin-inline:1px 2px; margin-left:3px; margin-right:4px",
         {"margin-inline-start", "margin-inline-end", "margin-left", "margin-right"}, {0, 0, 1, 2}, {0, 1, 0, 0}},
+    {"inset-block:1px 2px;inset-block-start:3px;top:4px",
+        {"inset-block-end", "inset-block-start", "top"}, {0, 1, 2}, {1, 0, 0}},
     {"margin-block:1px 2px; margin-block-start:3px; margin-top:4px",
         {"margin-block-end", "margin-block-start", "margin-top"}, {0, 1, 2}, {1, 0, 0}},
     {"padding:initial; padding-inline:2px; padding-block-end:3px",
@@ -871,6 +873,21 @@ static const struct {
     {"padding:1px 2px 3px 4px", "padding-right", "2px"},
     {"inset: AuTo -0 2em", "left", "0px"},
     {"margin-inline:1px 2em", "margin-inline-end", "2em"},
+    {"inset-block:1px 2em", "inset-block-start", "1px"},
+    {"inset-block:1px 2em", "inset-block-end", "2em"},
+    {"inset-block:auto", "inset-block-end", "auto"},
+    {"inset-block-start:+2.5PX", "inset-block-start", "2.5px"},
+    {"inset-block-end:-10%", "inset-block-end", "-10%"},
+    {"inset-block-end:calc(2px + 5%)", "inset-block-end", "calc(5% + 2px)"},
+    {"inset-block:1px 2px;inset-block-start:3px", "inset-block", "3px 2px"},
+    {"inset-block:1px 2px;top:3px", "inset-block", "1px 2px"},
+    {"inset-block-start:inherit;inset-block-end:inherit", "inset-block", "inherit"},
+    {"inset-block-start:initial;inset-block-end:inherit", "inset-block", ""},
+    {"inset-block:1px!important;inset-block-end:2px", "inset-block", "1px"},
+    {"inset-block-start:1px!important;inset-block-end:2px", "inset-block", ""},
+    {"inset-block:var(--I)", "inset-block-start", ""},
+    {"inset-block:var(--I);inset-block-end:auto", "inset-block", ""},
+    {"inset-block-end:var(--I, 2px)", "inset-block-end", "var(--I, 2px)"},
     {"padding-block:3%", "padding-block-end", "3%"},
     {"inset-block: AuTo -1px", "inset-block-start", "auto"},
     {"border-width: tHiN medium 0 1em", "border-bottom-width", "0px"},
@@ -3892,6 +3909,31 @@ START_TEST(test_repeat_decoration_invalid)
 }
 END_TEST
 
+/* CSS-wide keywords cannot be mixed with another component. These six
+ * shorthands use the same atomic pair parser, including deferred values. */
+static const char *const logical_pairs[] = {
+    "margin-block", "padding-block", "inset-block", "margin-inline", "padding-inline", "inset-inline"
+};
+
+START_TEST(test_logical_pair_invalid)
+{
+    const char *property = logical_pairs[_i / 2];
+    static const char *const invalid[] = {"1px inherit", "1px initial", "1px unset", "1px revert",
+        "inherit 1px", "initial auto", "unset initial", "1px 2px 3px", "1px, 2px", "1px junk"};
+    char css[192];
+    snprintf(css, sizeof(css), "%s:3px 4px", property);
+    css_declaration_list *base = parse(css, false);
+    for (size_t i = 0; i < N_ELEMENTS(invalid); i++) {
+        snprintf(css, sizeof(css), "%s:3px 4px;%s:%s", property, property, invalid[i]);
+        css_declaration_list *list = parse(css, _i % 2 != 0);
+        ck_assert_msg(css__declaration_list_count(list) == 1, "accepted invalid pair: %s", css);
+        compare_sheets(css__declaration_list_sheet(base), css__declaration_list_sheet(list));
+        css__declaration_list_destroy(list);
+    }
+    css__declaration_list_destroy(base);
+}
+END_TEST
+
 START_TEST(test_white_space_invalid)
 {
     static const struct { const char *property, *value; } cases[] = {
@@ -5374,6 +5416,51 @@ END_TEST
 #endif
 
 #ifdef WISP_TEST_ALLOC_FAILURE
+START_TEST(test_logical_pair_rollback)
+{
+    static const char *const forms[] = {"3px", "3px 4px", "initial", "inherit"};
+    char css[96];
+    unsigned variant = _i % N_ELEMENTS(forms);
+    snprintf(css, sizeof(css), "%s:%s", logical_pairs[_i / N_ELEMENTS(forms)], forms[variant]);
+    css_declaration_list *list = parse(css, false);
+    const css_declaration *declaration = css__declaration_list_get(list, 0);
+    ck_assert_ptr_nonnull(declaration);
+    css_stylesheet *sheet;
+    ck_assert_int_eq(css_stylesheet_create(&params, &sheet), CSS_OK);
+    parserutils_vector *tokens;
+    ck_assert_int_eq(parserutils_vector_create(sizeof(css_token), 4, &tokens), PARSERUTILS_OK);
+    for (size_t i = 0; i < declaration->token_count; i++) {
+        css_token token = {.type = declaration->tokens[i].type, .idata = declaration->tokens[i].text};
+        ck_assert_int_eq(parserutils_vector_append(tokens, &token), PARSERUTILS_OK);
+    }
+    unsigned words = variant < 2 ? 6 : 2;
+    for (unsigned spare = 0; spare < words; spare++) {
+        css_style *style;
+        ck_assert_int_eq(css__stylesheet_style_create(sheet, &style), CSS_OK);
+        uint32_t before = style->allocated - spare;
+        for (uint32_t i = 0; i < before; i++)
+            ck_assert_int_eq(css__stylesheet_style_append(style, 0x12345678), CSS_OK);
+        int32_t ctx = 0;
+        realloc_limit(0);
+        css_error error = declaration->property->handler(sheet->parser_frontend, tokens, &ctx, style);
+        realloc_limit(UINT_MAX);
+        ck_assert_msg(error == CSS_NOMEM, "%s spare %u: %d", css, spare, error);
+        ck_assert_int_eq(ctx, 0);
+        ck_assert_uint_eq(style->used, before);
+        for (uint32_t i = 0; i < before; i++)
+            ck_assert_uint_eq(style->bytecode[i], 0x12345678);
+        ck_assert_int_eq(declaration->property->handler(sheet->parser_frontend, tokens, &ctx, style), CSS_OK);
+        ck_assert_uint_eq(style->used, before + words);
+        css__stylesheet_style_destroy(style);
+    }
+    parserutils_vector_destroy(tokens);
+    css_stylesheet_destroy(sheet);
+    css__declaration_list_destroy(list);
+}
+END_TEST
+#endif
+
+#ifdef WISP_TEST_ALLOC_FAILURE
 START_TEST(test_position_rollback)
 {
     css_stylesheet *sheet;
@@ -5743,6 +5830,7 @@ int main(void)
     tcase_add_loop_test(tc, test_repeat_decoration_invalid, 0, 2);
     tcase_add_loop_test(tc, test_position_invalid, 0, 2);
     tcase_add_loop_test(tc, test_white_space_invalid, 0, 2);
+    tcase_add_loop_test(tc, test_logical_pair_invalid, 0, 2 * N_ELEMENTS(logical_pairs));
     tcase_add_loop_test(tc, test_place_content_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_place_content_invalid, 0, 2);
     tcase_add_test(tc, test_quirky_border_values);
@@ -5766,6 +5854,7 @@ int main(void)
     tcase_add_loop_test(tc, test_position_rollback, 0, 2);
     tcase_add_loop_test(tc, test_font_rollback, 0, 5);
     tcase_add_loop_test(tc, test_gap_rollback, 0, 4);
+    tcase_add_loop_test(tc, test_logical_pair_rollback, 0, 4 * N_ELEMENTS(logical_pairs));
     tcase_add_loop_test(tc, test_pair_keyword_rollback, 0, 6);
     tcase_add_loop_test(tc, test_grid_placement_rollback, 0, 7);
     tcase_add_loop_test(tc, test_font_face_allocation_failure, 0, 3);

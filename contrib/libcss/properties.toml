@@ -515,6 +515,28 @@ cascade = "none"
 computed = "none"
 helper_longhands = ["side"]
 
+# Keep declaration identities distinct; horizontal-tb maps block edges to
+# top/bottom independently of direction. No additional computed-style slots.
+[inset_block_start]
+declaration_value = "length"
+logical_group = "inset"
+logical = true
+enum = "CSS_PROP_TOP"
+inherited = false
+cascade = "none"
+computed = "none"
+parse = "WRAP:css__parse_side"
+
+[inset_block_end]
+declaration_value = "length"
+logical_group = "inset"
+logical = true
+enum = "CSS_PROP_BOTTOM"
+inherited = false
+cascade = "none"
+computed = "none"
+parse = "WRAP:css__parse_side"
+
 [inset_inline]
 declaration_value = "pair_length"
 declaration_longhands = ["inset_inline_start", "inset_inline_end"]
