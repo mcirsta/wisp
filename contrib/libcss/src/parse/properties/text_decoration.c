@@ -13,6 +13,14 @@
 #include "parse/properties/properties.h"
 #include "parse/properties/utils.h"
 
+/* Decoration line is the currently supported component of text-decoration.
+ * Reuse its grammar and bytecode without making the two CSS names aliases. */
+css_error css__parse_text_decoration_line(
+    css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
+{
+    return css__parse_text_decoration(c, vector, ctx, result);
+}
+
 /**
  * Parse text-decoration
  *

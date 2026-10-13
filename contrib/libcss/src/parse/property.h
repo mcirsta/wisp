@@ -14,6 +14,7 @@
  * bytecode. NONE deliberately has no generic source-text fallback. */
 enum css_declaration_value_kind {
     CSS_DECL_VALUE_NONE,
+    CSS_DECL_VALUE_SINGLE,
     CSS_DECL_VALUE_KEYWORD,
     CSS_DECL_VALUE_NUMBER,
     CSS_DECL_VALUE_LENGTH,
@@ -66,8 +67,8 @@ enum css_declaration_value_kind {
 /* Immutable registration shared by the parser, variable resolver and specified
  * declarations. IDs identify CSS names, not bytecode slots. In particular, a
  * logical property retains its identity even when layout maps it physically.
- * `shorthand` describes registered parser shorthands, not whether a handler is
- * generated via WRAP. This is not yet a CSSOM value-expansion catalogue. */
+ * `shorthand` describes supported CSS longhand membership, independent of the
+ * number of opcodes emitted or whether a handler is generated via WRAP. */
 struct css_prop_entry {
     const char *name;
     css_prop_handler handler;
@@ -76,7 +77,7 @@ struct css_prop_entry {
     enum css_logical_property_group logical_group;
     bool shorthand;
     bool logical;
-    /* Supported parser components in declaration order, not bytecode order.
+    /* Supported CSS longhands in declaration order, not bytecode order.
      * Some logical start/end names are only implemented through a shorthand.
      * This does not expand their values or expose additional parse handlers. */
     const char *const *longhands;
@@ -91,7 +92,7 @@ struct css_prop_entry {
  * case-sensitive name and do not have an entry in this registry. */
 const struct css_prop_entry *css_prop_lookup(const char *name, size_t len);
 
-/* Canonical parser shorthands in CSSOM preferred order. Static storage; aliases
+/* Canonical supported shorthands in CSSOM preferred order. Static storage; aliases
  * share their target's registration and do not occur separately. */
 const struct css_prop_entry *const *css_prop_shorthands(size_t *count);
 

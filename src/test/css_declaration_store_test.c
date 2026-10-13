@@ -109,6 +109,21 @@ static void check_order(const css_declaration_store *store, const char *names)
 static const struct {
     const char *initial, *assignment, *expected, *order;
 } assignments[] = {
+    {"font:italic small-caps 16px/1.5 serif;color:red", "font-variant-caps:normal",
+        "font: italic 16px / 1.5 serif; color: red;",
+        "font-style font-variant-caps font-weight font-size line-height font-family color"},
+    {"font-variant-caps:normal;color:red", "font-variant:small-caps!important",
+        "font-variant: small-caps !important; color: red;", "font-variant-caps color"},
+    {"text-decoration:underline!important;color:red", "text-decoration-line:overline",
+        "text-decoration: overline; color: red;", "text-decoration-line color"},
+    {"text-decoration-line:overline!important;color:red", "text-decoration:underline",
+        "text-decoration: underline; color: red;", "text-decoration-line color"},
+    {"font-variant:var(--Caps);text-decoration:var(--Lines);color:red", "opacity:.5",
+        "font-variant: var(--Caps); text-decoration: var(--Lines); color: red; opacity: 0.5;",
+        "font-variant-caps text-decoration-line color opacity"},
+    {"font-variant-caps:var(--Caps);text-decoration-line:var(--Lines);color:red", "opacity:.5",
+        "font-variant-caps: var(--Caps); text-decoration-line: var(--Lines); color: red; opacity: 0.5;",
+        "font-variant-caps text-decoration-line color opacity"},
     {"", "color:red", "color: red;", "color"},
     {"width:1px;color:red;width:2px", "width:3px", "color: red; width: 3px;", "color width"},
     {"width:1px;color:red", "width:2px", "width: 2px; color: red;", "width color"},
@@ -172,6 +187,15 @@ static const struct {
     const char *initial, *name, *old_value, *expected;
     bool important, changed;
 } removals[] = {
+    {"font-variant:small-caps!important;color:red", "font-variant-caps", "small-caps", "color: red;", true, true},
+    {"font-variant-caps:small-caps!important;color:red", "font-variant", "small-caps", "color: red;", true, true},
+    {"font:italic small-caps 16px serif;color:red", "font-variant-caps", "small-caps",
+        "font-style: italic; font-weight: normal; font-size: 16px; line-height: normal; font-family: serif; color: red;",
+        false, true},
+    {"text-decoration:underline!important;color:red", "text-decoration-line", "underline", "color: red;", true, true},
+    {"text-decoration-line:underline!important;color:red", "text-decoration", "underline", "color: red;", true, true},
+    {"font-variant:var(--Caps);color:red", "font-variant-caps", "", "color: red;", false, true},
+    {"text-decoration:var(--Lines);color:red", "text-decoration-line", "", "color: red;", false, true},
     {"", "width", "", "", false, false},
     {"width:1px;color:red", "WIDTH", "1px", "color: red;", false, true},
     {"width:1px!important;color:red", "w\\69 dth", "", "width: 1px !important; color: red;", false, false},
@@ -368,6 +392,55 @@ START_TEST(test_nonfinite_values_survive_edits)
     ck_assert_int_eq(css__declaration_store_remove(store, "width", 5, &changed), CSS_OK);
     ck_assert(changed);
     check_text(store, "margin: var(--m); color: red;");
+    css__declaration_store_destroy(store);
+}
+END_TEST
+
+START_TEST(test_pending_sources_survive_edits)
+{
+    css_declaration_store *store = create("margin:var(--Margins)!important;font:var(--Font);"
+        "text-decoration:var(--Lines);color:red", _i != 0);
+    const css_declaration *margin = css__declaration_store_get(store, 0)->source;
+    const css_declaration *font = css__declaration_store_get(store, 4)->source;
+    const css_declaration *decoration = css__declaration_store_get(store, 10)->source;
+    ck_assert(set(store, "margin-left:2px", _i != 0));
+    ck_assert(set(store, "font-variant-caps:small-caps", _i != 0));
+    ck_assert(set(store, "opacity:.5", _i != 0));
+    /* CSS Values 5 requires empty pending-substitution readback. The store,
+     * not a parse of cssText, remains authoritative after an API edit. */
+    check_value(store, "margin-top", "", true);
+    check_value(store, "font-family", "", false);
+    check_value(store, "font-variant", "small-caps", false);
+    check_value(store, "text-decoration", "var(--Lines)", false);
+    check_value(store, "text-decoration-line", "", false);
+    for (size_t i = 0; i < css__declaration_store_count(store); i++) {
+        const css_declaration_contribution *entry = css__declaration_store_get(store, i);
+        const css_declaration *expected = NULL;
+        if (i < 3)
+            expected = margin;
+        else if (i == 4 || (i >= 6 && i <= 9))
+            expected = font;
+        else if (i == 10)
+            expected = decoration;
+        if (expected != NULL) {
+            ck_assert_ptr_eq(entry->source, expected);
+            ck_assert(expected->deferred);
+        }
+    }
+    bool changed;
+    ck_assert_int_eq(css__declaration_store_remove(store, "margin-right", 12, &changed), CSS_OK);
+    ck_assert(changed);
+    check_value(store, "margin-right", "", false);
+    ck_assert_ptr_eq(css__declaration_store_get(store, 0)->source, margin);
+    /* A longhand var() is observable; replacing it by an otherwise identical
+     * shorthand var() changes that observable value and cannot be a no-op. */
+    ck_assert(set(store, "text-decoration-line:var(--Lines)", _i != 0));
+    check_value(store, "text-decoration-line", "var(--Lines)", false);
+    check_value(store, "text-decoration", "", false);
+    ck_assert(set(store, "text-decoration:var(--Lines)", _i != 0));
+    check_value(store, "text-decoration-line", "", false);
+    check_value(store, "text-decoration", "var(--Lines)", false);
+    ck_assert(!set(store, "text-decoration:var(--Lines)", _i != 0));
     css__declaration_store_destroy(store);
 }
 END_TEST
@@ -964,6 +1037,7 @@ int main(void)
     tcase_add_loop_test(tc, test_extended_polar_values_survive_edits, 0, 2);
     tcase_add_loop_test(tc, test_calc_values_survive_edits, 0, 2);
     tcase_add_test(tc, test_nonfinite_values_survive_edits);
+    tcase_add_loop_test(tc, test_pending_sources_survive_edits, 0, 2);
     tcase_add_test(tc, test_length_and_borrowed_names);
     tcase_add_test(tc, test_repeated_edits_release_sources);
     tcase_add_test(tc, test_shared_source_lifetime);

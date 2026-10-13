@@ -836,6 +836,12 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
     enum css_declaration_value_kind kind = property->value_kind;
     if (kind == CSS_DECL_VALUE_NONE)
         return CSS_INVALID;
+    if (kind == CSS_DECL_VALUE_SINGLE) {
+        css_declaration part = *source;
+        part.property = css_prop_lookup(property->longhands[0], strlen(property->longhands[0]));
+        const css_declaration_contribution member = {.source = &part};
+        return css__declaration_value_serialize(&member, out);
+    }
     if (kind == CSS_DECL_VALUE_TRANSFORM)
         return css__declaration_transform_serialize(source, out);
     if (kind == CSS_DECL_VALUE_ANGLE)
@@ -1046,6 +1052,8 @@ css_error css__declaration_shorthand_serialize(const struct css_prop_entry *prop
     if (any_wide)
         return same_wide ? intern(wide, strlen(wide), out) : intern("", 0, out);
     enum css_declaration_value_kind kind = property->value_kind;
+    if (kind == CSS_DECL_VALUE_SINGLE)
+        return css__declaration_value_serialize(members[0], out);
     if (kind == CSS_DECL_VALUE_FONT)
         return css__declaration_font_shorthand(members, out);
     if (kind == CSS_DECL_VALUE_BACKGROUND)

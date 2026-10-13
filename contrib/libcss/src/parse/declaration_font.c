@@ -20,7 +20,7 @@ enum {
     FONT_PART_COMPONENTS
 };
 static const char *const names[FONT_PART_COMPONENTS] = {
-    "font-style", "font-variant", "font-weight", "font-size", "line-height", "font-family"};
+    "font-style", "font-variant-caps", "font-weight", "font-size", "line-height", "font-family"};
 
 /* System-font serialization is not yet settled (csswg-drafts#1586). Preserve
  * the untouched shorthand keyword; expose the native parser's resolved values

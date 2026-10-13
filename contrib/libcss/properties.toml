@@ -107,10 +107,12 @@
 #   manual         Full manual parse implementation in src/parse/properties/<name>.c
 #                  (no gen_parser output). If cascade = "ident", you still need a
 #                  'parse' field so the cascade generator can extract opcode names.
-#   declaration_longhands  Ordered components of a registered shorthand. Lists
-#                  the supported parser components, not bytecode order. Aggregate
-#                  CSS2 components (font-variant, background-position/repeat) still
-#                  need modern CSSOM decomposition before exposing element.style.
+#   declaration_longhands  Ordered supported longhands of a CSS shorthand,
+#                  independent of bytecode storage or parser implementation.
+#                  A "single" value family describes an aggregate for which only
+#                  one longhand is currently supported; its parser can still emit
+#                  one existing opcode. Background position/repeat still need
+#                  modern CSSOM decomposition before exposing element.style.
 #                  Logical start/end names retain their identity even where the
 #                  current renderer only implements their parent shorthand.
 #   declaration_value  Specified-value serialization family: number, length,
@@ -711,7 +713,8 @@ initial = "NORMAL"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NORMAL:0,FONT_STYLE_NORMAL ITALIC:0,FONT_STYLE_ITALIC OBLIQUE:0,FONT_STYLE_OBLIQUE IDENT:)'''
 
 [font_variant]
-declaration_value = "keyword"
+declaration_value = "single"
+declaration_longhands = ["font_variant_caps"]
 enum = "CSS_PROP_FONT_VARIANT"
 cascade = "ident"
 computed = "auto"
@@ -719,6 +722,14 @@ inherited = true
 bits = 2
 initial = "NORMAL"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NORMAL:0,FONT_VARIANT_NORMAL SMALL_CAPS:0,FONT_VARIANT_SMALL_CAPS IDENT:)'''
+
+[font_variant_caps]
+declaration_value = "keyword"
+enum = "CSS_PROP_FONT_VARIANT"
+inherited = true
+manual = true
+cascade = "none"
+computed = "none"
 
 [font_weight]
 declaration_value = "number"
@@ -1258,7 +1269,8 @@ initial = "DEFAULT"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: LEFT:0,TEXT_ALIGN_LEFT RIGHT:0,TEXT_ALIGN_RIGHT CENTER:0,TEXT_ALIGN_CENTER JUSTIFY:0,TEXT_ALIGN_JUSTIFY IDENT:)'''
 
 [text_decoration]
-declaration_value = "text_decoration"
+declaration_value = "single"
+declaration_longhands = ["text_decoration_line"]
 enum = "CSS_PROP_TEXT_DECORATION"
 inherited = false
 cascade = "manual"
@@ -1266,6 +1278,14 @@ computed = "auto"
 manual = true
 bits = 5
 initial = "NONE"
+
+[text_decoration_line]
+declaration_value = "text_decoration"
+enum = "CSS_PROP_TEXT_DECORATION"
+inherited = false
+manual = true
+cascade = "none"
+computed = "none"
 
 [text_indent]
 declaration_value = "length"
@@ -2114,7 +2134,7 @@ computed = "none"
 [font]
 declaration_value = "font"
 helper_longhands = ["font_size", "line_height"]
-declaration_longhands = ["font_style", "font_variant", "font_weight", "font_size", "line_height", "font_family"]
+declaration_longhands = ["font_style", "font_variant_caps", "font_weight", "font_size", "line_height", "font_family"]
 enum = "CSS_PROP_FONT"
 inherited = false
 shorthand = true

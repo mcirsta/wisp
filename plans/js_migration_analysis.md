@@ -55,7 +55,8 @@ Lab-family batch as `24cde21d`, missing-RGB/sRGB support as `8f1aacf3`, and
 extended HSL/HWB readback as `ed777a47`, and resolved system-font readback as
 `2485deb1`. Shared native calc grammar validation is committed as `6f5ae059`, and finite
 math readback/edit preservation as `facb2b04`, and native calculation precision
-as `840e2aea`.
+as `840e2aea`. Non-finite calculations, shared simplification and generated
+property ranges are committed as `ed93be8d`.
 Earlier dated sections are historical records, not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
@@ -77,13 +78,19 @@ the target. Each group can require more than one tested batch:
   shorthand edit preservation, calculation precision and final range conversion.
   This does not add dimensional products or new math functions.
 - [ ] Modern aggregate property identities/decomposition and preservation:
-  finish the older aggregate models (`font-variant`, background position/repeat
-  axes, text decoration, white space and logical start/end identities), then
-  verify that editing one property cannot discard another accepted value.
-  Include partially overridden pending shorthands: `margin:var(--m)` followed
-  by `margin-left:2px` currently serializes the three pending sides as empty
-  declarations; reparsing loses those pending contributions. Native storage
-  retains them. This is part of this preservation group, not a new branch.
+  `font-variant` and `text-decoration` now decompose into their supported
+  `font-variant-caps` and `text-decoration-line` longhands, sharing native
+  parsing/cascade storage. Background position/repeat axes, white space and
+  logical start/end identities remain. Full new font/decoration grammars are
+  not prerequisites for this target.
+  Pending-substitution preservation has native edit coverage. Correction to
+  the earlier note: empty pending longhand readback is **required** by CSS
+  Values 5; it is not a serialization bug. `margin:var(--m)` followed by
+  `margin-left:2px` cannot reliably round-trip through CSSOM text. DOM/render
+  integration must keep the owned declarations authoritative for API edits,
+  suppress reparsing its own style-attribute update, and feed retained pending
+  contributions to selection. Explicit author cssText/setAttribute replacements
+  do parse the new text normally. Verify this in the DOM synchronization group.
 - [ ] QuickJS `CSSStyleProperties`: stable per-element object, generated property
   accessors, standard methods, enumeration and CSSOM exception/conversion rules.
 - [ ] DOM synchronization: style-attribute edits in both directions, coalesced
@@ -94,7 +101,7 @@ the target. Each group can require more than one tested batch:
 The earlier estimate of roughly 8–15 focused batches is a planning estimate,
 not a delivery guarantee. Property-family registrations are a coverage aid,
 not a percentage-complete measure: families can still have unsupported value
-forms. All 185 property registrations now have a family; this closes the
+forms. All 187 property registrations now have a family; this closes the
 unregistered-family work, not the remaining value forms or live binding.
 Update this list as groups finish. Keep
 optional rendering discoveries in `src/docs/layout-correctness.md` unless they
@@ -2606,6 +2613,49 @@ Release and Debug native CSS/layout/QuickJS suites pass (87 each), as do the
 checks are clean; both complete builds are warning-free. GTK and Windows were
 not built. CSSOM's six-decimal normalization and the existing scalar-only math
 grammar remain the limits of this group.
+
+### Supported font/decoration aggregate identities (2026-10-13)
+
+Committed the completed math batch as `ed93be8d`. This batch separates CSSOM
+shorthand membership from the renderer's opcode count. `font-variant` and
+`text-decoration` can keep their existing native storage while their supported
+values participate in declaration ordering, editing and removal under the
+`font-variant-caps` and `text-decoration-line` longhand names. `font` now expands
+directly to caps, so changing caps preserves the other font declarations,
+including client-resolved system fonts.
+
+`properties.toml` remains authoritative. Its `single` serialization family is
+for an aggregate with one currently supported longhand. Generated registrations
+retain separate identities; they are not name aliases. The two new handlers
+reuse the existing grammar/cascade path and do not increase computed-style
+storage. Native bytecode is identical for corresponding accepted values. Wider
+font-variant features, decoration colors/styles/thickness and their grammars
+remain unsupported; this does not claim full implementation of either shorthand.
+The property relationships follow [CSS Fonts 4](https://drafts.csswg.org/css-fonts-4/#font-variant-prop)
+and [CSS Text Decoration 3](https://drafts.csswg.org/css-text-decor-3/#text-decoration-property).
+
+Corrected the earlier pending-shorthand diagnosis: [CSS Values 5 substitution in
+shorthands](https://drafts.csswg.org/css-values-5/#substitution-in-shorthands)
+requires empty serialization for pending longhands. Therefore CSSOM text is
+not a lossless internal stylesheet format. Tests now explicitly retain the
+original pending sources through unrelated edits, partial overrides and removals,
+and distinguish a longhand `var()` from the same text assigned to a shorthand.
+DOM synchronization must consume that owned state for rendering rather than
+reparse its own attribute serialization. This integration is still pending.
+
+The historical Duktape `HTMLElement::style` getter was reviewed again at
+`80c4aca5f50180d14377a773fb731df6ab272497`. It returned a new placeholder object
+to avoid a Modernizr loop; there is no native declaration-store implementation
+there to reuse. The modern binding still needs stable per-element identity.
+
+Validation covers whole/chunked grammar, shorthand/longhand readback, priorities,
+source ownership, no-op assignments, removals and serialize/reparse of values
+that have a textual representation. Native selection also checks literal and
+deferred values, invalid substitutions, font resets and priorities in both
+stylesheets and inline declarations. The 87 native suites pass in Release and
+Debug with clean native ASan/UBSan/LSan checks; seven selected Release Qt suites
+and ten Debug Qt suites pass. Background axes, white-space decomposition and
+logical start/end registration remain in the same finite checklist group.
 
 ## Assessment
 

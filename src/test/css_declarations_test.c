@@ -629,6 +629,57 @@ START_TEST(test_property_metadata)
 }
 END_TEST
 
+START_TEST(test_aggregate_longhand_parsers)
+{
+    static const struct {
+        const char *aggregate, *longhand;
+        const char *valid[8];
+        const char *invalid[8];
+    } families[] = {
+        {"font-variant", "font-variant-caps", {"normal", "SMALL-CAPS", "inherit", "initial", "unset", "revert"},
+            {"small-caps normal", "small-caps small-caps", "1", "all-small-caps", "none"}},
+        {"text-decoration", "text-decoration-line",
+            {"none", "UNDERLINE", "overline line-through underline blink", "inherit", "initial", "unset", "revert"},
+            {"none underline", "underline underline", "underline solid", "red", "2px", "underline,overline"}},
+    };
+    for (size_t f = 0; f < sizeof(families) / sizeof(families[0]); f++) {
+        const struct css_prop_entry *aggregate = css_prop_lookup(families[f].aggregate, strlen(families[f].aggregate));
+        const struct css_prop_entry *longhand = css_prop_lookup(families[f].longhand, strlen(families[f].longhand));
+        ck_assert_ptr_nonnull(aggregate);
+        ck_assert_ptr_nonnull(longhand);
+        ck_assert(aggregate != longhand && aggregate->id != longhand->id);
+        ck_assert(aggregate->shorthand && !longhand->shorthand);
+        ck_assert_uint_eq(aggregate->longhand_count, 1);
+        ck_assert_str_eq(aggregate->longhands[0], longhand->name);
+        for (size_t i = 0; i < 8 && families[f].valid[i] != NULL; i++) {
+            for (unsigned important = 0; important < 2; important++) {
+                char a[192], b[192];
+                snprintf(a, sizeof(a), "%s:%s%s", families[f].aggregate, families[f].valid[i],
+                    important ? "!important" : "");
+                snprintf(b, sizeof(b), "%s:%s%s", families[f].longhand, families[f].valid[i],
+                    important ? "!important" : "");
+                css_declaration_list *first = parse(a, _i != 0), *second = parse(b, _i != 0);
+                ck_assert_msg(css__declaration_list_count(second) == 1, "rejected %s", b);
+                /* Identical native bytecode: rendering, priority and CSS-wide
+                 * cascade semantics use the same implementation. */
+                compare_sheets(css__declaration_list_sheet(first), css__declaration_list_sheet(second));
+                css__declaration_list_destroy(first);
+                css__declaration_list_destroy(second);
+            }
+        }
+        for (size_t i = 0; i < 8 && families[f].invalid[i] != NULL; i++) {
+            char css[192];
+            snprintf(css, sizeof(css), "color:red;%s:%s;opacity:.5", families[f].longhand, families[f].invalid[i]);
+            css_declaration_list *list = parse(css, _i != 0);
+            ck_assert_msg(css__declaration_list_count(list) == 2, "incorrectly accepted %s", css);
+            ck_assert_str_eq(lwc_string_data(css__declaration_list_get(list, 0)->name), "color");
+            ck_assert_str_eq(lwc_string_data(css__declaration_list_get(list, 1)->name), "opacity");
+            css__declaration_list_destroy(list);
+        }
+    }
+}
+END_TEST
+
 START_TEST(test_order_lifecycle)
 {
     css_declaration_order *order = (void *)1;
@@ -2290,6 +2341,28 @@ static const struct {
     {"font-variant:small-caps!important;font-variant:normal", "font-variant", "small-caps"},
     {"font-variant:small-caps;font-variant:initial", "font-variant", "initial"},
     {"font-variant:var(--Caps, small-caps)", "font-variant", "var(--Caps, small-caps)"},
+    {"font-variant:SMALL-CAPS", "font-variant-caps", "small-caps"},
+    {"font-variant-caps:SMALL-CAPS", "font-variant", "small-caps"},
+    {"font-variant:var(--Caps, small-caps)", "font-variant-caps", ""},
+    {"font-variant-caps:var(--Caps, small-caps)", "font-variant", ""},
+    {"font-variant-caps:var(--Caps, small-caps)", "font-variant-caps", "var(--Caps, small-caps)"},
+    {"font-variant:small-caps;font-variant-caps:normal", "font-variant", "normal"},
+    {"font-variant-caps:small-caps!important;font-variant:normal", "font-variant", "small-caps"},
+    {"font:italic small-caps 16px serif", "font-variant-caps", "small-caps"},
+    {"font:italic small-caps 16px serif;font-variant-caps:normal", "font", "italic 16px serif"},
+    {"font-variant-caps:small-caps;font:16px serif", "font-variant-caps", "normal"},
+    {"font:var(--Font)", "font-variant-caps", ""},
+    {"font-variant-caps:initial", "font-variant", "initial"},
+    {"font-variant:inherit", "font-variant-caps", "inherit"},
+    {"text-decoration:BLINK OVERLINE UNDERLINE", "text-decoration-line", "underline overline blink"},
+    {"text-decoration-line:LINE-THROUGH UNDERLINE", "text-decoration", "underline line-through"},
+    {"text-decoration:var(--Lines)", "text-decoration-line", ""},
+    {"text-decoration-line:var(--Lines)", "text-decoration", ""},
+    {"text-decoration-line:var(--Lines)", "text-decoration-line", "var(--Lines)"},
+    {"text-decoration-line:overline!important;text-decoration:underline", "text-decoration", "overline"},
+    {"text-decoration:underline;text-decoration-line:none", "text-decoration", "none"},
+    {"text-decoration-line:unset", "text-decoration", "unset"},
+    {"text-decoration:revert", "text-decoration-line", "revert"},
     {"white-space:NORMAL", "white-space", "normal"},
     {"white-space:PRE", "white-space", "pre"},
     {"white-space:NOWRAP", "white-space", "nowrap"},
@@ -5579,6 +5652,7 @@ int main(void)
 #endif
     tcase_add_loop_test(tc, test_declaration_order, 0, ORDER_CASE_COUNT);
     tcase_add_test(tc, test_property_metadata);
+    tcase_add_loop_test(tc, test_aggregate_longhand_parsers, 0, 2);
     tcase_add_loop_test(tc, test_alias_bytecode, 0, 2);
     tcase_add_test(tc, test_order_many_custom_properties);
     tcase_add_test(tc, test_order_lifecycle);

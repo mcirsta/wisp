@@ -46,6 +46,19 @@ static const struct {
     const char *input, *expected;
     bool pending; /* Partial pending shorthands serialize empty longhands, not round-trippable values. */
 } cases[] = {
+    {"font-variant:small-caps;font-variant-caps:normal;text-decoration:underline;text-decoration-line:overline",
+        "font-variant: normal; text-decoration: overline;"},
+    {"font-variant-caps:small-caps!important;font-variant:normal;"
+     "text-decoration-line:overline!important;text-decoration:underline",
+        "font-variant: small-caps !important; text-decoration: overline !important;"},
+    {"font:italic small-caps 16px serif;font-variant-caps:normal",
+        "font: italic 16px serif;"},
+    {"font-variant-caps:var(--Caps);text-decoration-line:var(--Lines)",
+        "font-variant-caps: var(--Caps); text-decoration-line: var(--Lines);"},
+    {"font-variant:var(--Caps);text-decoration:var(--Lines)",
+        "font-variant: var(--Caps); text-decoration: var(--Lines);"},
+    {"font:var(--Font);font-variant-caps:small-caps",
+        "font-style: ; font-weight: ; font-size: ; line-height: ; font-family: ; font-variant: small-caps;", true},
     {"background:linear-gradient(hsl(30 200 40),hwb(0 -10 10));border:solid hsl(30 200 40)!important",
         "background: linear-gradient(rgb(255, 102, 0), rgb(229.5, 0, 0)); border: solid rgb(255, 102, 0) !important;"},
     {"background:linear-gradient(rgb(none 255 0),color(srgb 0 0 100%)) color(srgb .5 0 0);"

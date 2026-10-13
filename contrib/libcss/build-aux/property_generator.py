@@ -244,13 +244,14 @@ class TomlPropertyReader:
         return self.prop_map
     
     def validate_declarations(self):
-        """Keep parser shorthand membership explicit and fail on stale metadata."""
+        """Keep supported CSS shorthand membership independent of bytecode slots."""
         self.get_legacy_aliases()
         for name, prop in self.toml_data.items():
-            shorthand = prop.get('shorthand', False) or prop['enum'].startswith('BORDER_SIDE_')
+            shorthand = (prop.get('shorthand', False) or prop['enum'].startswith('BORDER_SIDE_') or
+                         prop.get('declaration_value') == 'single')
             members = prop.get('declaration_longhands', [])
             if shorthand != bool(members):
-                raise ValueError(f"{name}: declaration_longhands must describe each parser shorthand")
+                raise ValueError(f"{name}: declaration_longhands must describe each supported shorthand")
             if not isinstance(members, list) or len(members) != len(set(members)):
                 raise ValueError(f"{name}: duplicate or invalid declaration_longhands")
             if shorthand and prop.get('logical') and members != [name + '_start', name + '_end']:
@@ -268,7 +269,7 @@ class TomlPropertyReader:
                 elif target.get('declaration_longhands'):
                     raise ValueError(f"{name}: nested shorthand {member}; list its components")
             value_kind = prop.get('declaration_value', 'none')
-            if value_kind not in ('none', 'number', 'length', 'number_length', 'keyword', 'pair_length',
+            if value_kind not in ('none', 'single', 'number', 'length', 'number_length', 'keyword', 'pair_length',
                                   'quad_length', 'pair_keyword', 'quad_keyword', 'uri', 'cursor', 'image_list', 'keyword_list',
                                   'time', 'pair_time', 'frequency', 'angle', 'pair_uri', 'play_during', 'voice_family',
                                   'content', 'string_list', 'counter_list', 'aspect_ratio', 'border_spacing', 'clip',
@@ -277,14 +278,14 @@ class TomlPropertyReader:
                                   'repeat_list', 'text_decoration', 'background', 'font', 'transform', 'grid_tracks', 'grid_flow'):
                 raise ValueError(f"{name}: unknown declaration_value {value_kind}")
             if value_kind != 'none':
-                expected = {'pair_length': 2, 'quad_length': 4, 'pair_keyword': 2, 'quad_keyword': 4,
+                expected = {'single': 1, 'pair_length': 2, 'quad_length': 4, 'pair_keyword': 2, 'quad_keyword': 4,
                             'pair_time': 2, 'pair_uri': 2,
                             'flex': 3, 'flex_flow': 2, 'list_style': 3, 'columns': 2, 'border': 12, 'border_side': 3,
                             'outline': 3, 'quad_colour': 4, 'grid_pair': 2, 'grid_area': 4,
                             'background': 5, 'font': 6}.get(value_kind, 0)
                 if len(members) != expected:
                     raise ValueError(f"{name}: declaration_value requires {expected} longhands")
-                ordered = {'font': ['font_style', 'font_variant', 'font_weight', 'font_size', 'line_height', 'font_family'],
+                ordered = {'font': ['font_style', 'font_variant_caps', 'font_weight', 'font_size', 'line_height', 'font_family'],
                            'flex': ['flex_grow', 'flex_shrink', 'flex_basis'],
                            'background': ['background_image', 'background_position', 'background_repeat',
                                           'background_attachment', 'background_color'],
@@ -1164,9 +1165,10 @@ class MultiFileGenerator:
             handler_name = f"css__parse_{prop_name}"
             opcode = opcode_map.get(prop_name, -1)  # -1 for shorthands/aliases
             data = self.toml_reader.toml_data[prop_name] if self.toml_reader else {}
-            # WRAP is a parser implementation detail: border-top-color is a
-            # longhand, whereas border-top is a shorthand using the same device.
-            shorthand = (self.metadata[prop_name]['is_shorthand'] and prop_name not in opcode_map)
+            # CSSOM identities do not follow parser implementation or opcode
+            # count: a legacy aggregate may still occupy one rendering slot.
+            shorthand = (bool(data.get('declaration_longhands')) if self.toml_reader else
+                         self.metadata[prop_name]['is_shorthand'] and prop_name not in opcode_map)
             group = data.get('logical_group', 'none').upper()
             logical = data.get('logical', False)
             metadata = (f"CSS_DECL_{prop_name.upper()}, CSS_LOGICAL_GROUP_{group}, "

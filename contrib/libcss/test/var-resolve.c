@@ -1927,6 +1927,69 @@ static void test_repeat_and_decoration_values(void)
     }
 }
 
+/* CSS Fonts 4 / Text Decoration 3 longhand identities share the supported
+ * legacy rendering values, including substitution and cascade precedence. */
+static void test_aggregate_longhand_values(void)
+{
+    static const struct {
+        const char *declarations;
+        uint8_t caps, lines;
+    } cases[] = {
+        {"font-variant-caps:small-caps;text-decoration-line:underline overline",
+            CSS_FONT_VARIANT_SMALL_CAPS, CSS_TEXT_DECORATION_UNDERLINE | CSS_TEXT_DECORATION_OVERLINE},
+        {"font-variant:small-caps;font-variant-caps:normal;text-decoration:underline;text-decoration-line:none",
+            CSS_FONT_VARIANT_NORMAL, CSS_TEXT_DECORATION_NONE},
+        {"font-variant-caps:small-caps!important;font-variant:normal;"
+         "text-decoration-line:overline!important;text-decoration:underline",
+            CSS_FONT_VARIANT_SMALL_CAPS, CSS_TEXT_DECORATION_OVERLINE},
+        {"--caps:small-caps;--lines:overline;"
+         "font-variant-caps:var(--caps);text-decoration-line:var(--lines)",
+            CSS_FONT_VARIANT_SMALL_CAPS, CSS_TEXT_DECORATION_OVERLINE},
+        {"--caps:small-caps;--lines:overline;"
+         "font-variant-caps:var(--caps);font-variant:normal;"
+         "text-decoration-line:var(--lines);text-decoration:underline",
+            CSS_FONT_VARIANT_NORMAL, CSS_TEXT_DECORATION_UNDERLINE},
+        {"--caps:small-caps;--lines:overline;"
+         "font-variant:var(--caps);font-variant-caps:normal;"
+         "text-decoration:var(--lines);text-decoration-line:underline",
+            CSS_FONT_VARIANT_NORMAL, CSS_TEXT_DECORATION_UNDERLINE},
+        {"--caps:small-caps;--lines:overline;"
+         "font-variant-caps:var(--caps)!important;font-variant:normal;"
+         "text-decoration-line:var(--lines)!important;text-decoration:underline",
+            CSS_FONT_VARIANT_SMALL_CAPS, CSS_TEXT_DECORATION_OVERLINE},
+        {"font-variant:small-caps;font-variant-caps:var(--missing);"
+         "text-decoration:underline;text-decoration-line:var(--missing)",
+            CSS_FONT_VARIANT_NORMAL, CSS_TEXT_DECORATION_NONE},
+        {"--caps:bad;--lines:bad;font-variant:small-caps;font-variant-caps:var(--caps);"
+         "text-decoration:underline;text-decoration-line:var(--lines)",
+            CSS_FONT_VARIANT_NORMAL, CSS_TEXT_DECORATION_NONE},
+        {"font-variant-caps:var(--missing,small-caps);text-decoration-line:var(--missing,overline)",
+            CSS_FONT_VARIANT_SMALL_CAPS, CSS_TEXT_DECORATION_OVERLINE},
+        {"--font:small-caps 16px serif;font:var(--font);font-variant-caps:normal;"
+         "text-decoration-line:underline", CSS_FONT_VARIANT_NORMAL, CSS_TEXT_DECORATION_UNDERLINE},
+        {"font-variant-caps:small-caps;font:16px serif;text-decoration-line:underline;"
+         "text-decoration:var(--missing,initial)", CSS_FONT_VARIANT_NORMAL, CSS_TEXT_DECORATION_NONE},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        for (unsigned inlined = 0; inlined < 2; inlined++) {
+            char css[512];
+            snprintf(css, sizeof(css), "div {%s}", cases[i].declarations);
+            style_case ctx;
+            setup_style_case(&ctx, inlined ? "" : css);
+            if (inlined)
+                ctx.inline_style = create_stylesheet_from_css(cases[i].declarations, true, false);
+            const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, ctx.inline_style, &ctx.results);
+            uint8_t caps = css_computed_font_variant(style), lines = css_computed_text_decoration(style);
+            if (caps != cases[i].caps || lines != cases[i].lines) {
+                fprintf(stderr, "aggregate case %zu inline %u: caps %u/%u, lines %u/%u\n%s\n",
+                    i, inlined, caps, cases[i].caps, lines, cases[i].lines, css);
+                assert(false);
+            }
+            destroy_style_case(&ctx);
+        }
+    }
+}
+
 static void test_position_payloads(void)
 {
     static const struct {
@@ -2106,6 +2169,7 @@ int main(int argc, char **argv)
     test_svg_paint_payloads();
     test_position_payloads();
     test_repeat_and_decoration_values();
+    test_aggregate_longhand_values();
     test_gap_aliases();
     test_deferred_revert();
     test_environment_outlives_stylesheet();

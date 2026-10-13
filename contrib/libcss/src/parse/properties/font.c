@@ -15,6 +15,13 @@
 #include "parse/properties/properties.h"
 #include "parse/properties/utils.h"
 
+/* The supported normal/small-caps grammar shares the existing rendering slot.
+ * Keep a distinct CSS identity: font-variant is a shorthand, caps is not. */
+css_error css__parse_font_variant_caps(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
+{
+    return css__parse_font_variant(c, vector, ctx, result);
+}
+
 /**
  * Convert css_unit to a bytecode unit.
  */

@@ -82,6 +82,31 @@ class DeclarationMetadataTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "width: unknown declaration_value"):
             self.reader.validate_declarations()
 
+    def test_aggregate_identity_is_independent_of_rendering_slot(self):
+        generator = GEN.MultiFileGenerator(self.reader.get_dispatch_order(), self.reader.prop_map)
+        generator.toml_reader = self.reader
+        output = generator.generate_gperf_input()
+        dispatch = {prop['name'] for prop in self.reader.get_dispatch_order()}
+        for aggregate, member in (('font_variant', 'font_variant_caps'),
+                                  ('text_decoration', 'text_decoration_line')):
+            with self.subTest(aggregate=aggregate):
+                self.assertIn(aggregate, dispatch)
+                self.assertNotIn(member, dispatch)
+                self.assertEqual(self.reader.toml_data[aggregate]['declaration_longhands'], [member])
+                self.assertEqual(self.reader.toml_data[aggregate]['enum'], self.reader.toml_data[member]['enum'])
+                entry = next(line for line in output.splitlines()
+                             if line.startswith('    {"' + aggregate.replace('_', '-') + '",'))
+                self.assertIn(f'true, false, css_decl_members_{aggregate}, 1, CSS_DECL_VALUE_SINGLE', entry)
+                entry = next(line for line in output.splitlines()
+                             if line.startswith('    {"' + member.replace('_', '-') + '",'))
+                self.assertIn('false, false, NULL, 0', entry)
+                self.assertNotIn(member.replace('_', '-'), self.reader.get_legacy_aliases())
+
+    def test_single_aggregate_requires_one_longhand(self):
+        self.reader.toml_data['font_variant']['declaration_longhands'].append('font_weight')
+        with self.assertRaisesRegex(ValueError, 'font_variant: declaration_value requires 1'):
+            self.reader.validate_declarations()
+
     def test_value_family_arity(self):
         for kind in ("pair_length", "pair_keyword", "pair_time", "pair_uri"):
             with self.subTest(kind=kind):
