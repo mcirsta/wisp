@@ -51,8 +51,8 @@ metadata, winning-declaration order, shorthand reconstruction, owned editing,
 whole-value assignments and broad specified-value serialization. The transform
 and Grid batches are committed as `285fee12` and `9fbddb34`; the SVG paint/cursor
 batch is committed as `f7a238d0`, the legacy aural batch as `fdf7b373`, and the
-Lab-family batch as `24cde21d`. Earlier dated sections are historical records,
-not additional unchecked requirements.
+Lab-family batch as `24cde21d`, and missing-RGB/sRGB support as `8f1aacf3`.
+Earlier dated sections are historical records, not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
 the target. Each group can require more than one tested batch:
@@ -63,9 +63,10 @@ the target. Each group can require more than one tested batch:
 - [x] Remaining scalar/list families: specified-value readback for the
   already-registered legacy speech properties (2026-10-13). This preserves
   existing declarations without implementing new speech functionality.
-- [ ] Remaining color/font readback gaps: Lab/LCH/Oklab/OkLCh and missing RGB
-  components with real `color(srgb ...)` parsing/readback are complete (2026-10-13).
-  Out-of-gamut HSL/HWB readback and client-resolved system-font cases remain.
+- [ ] Remaining color/font readback gaps: color readback is complete for the
+  already-supported non-math forms, including extended HSL/HWB, Lab-family
+  colors and missing RGB components (2026-10-13). Client-resolved system-font
+  cases remain. Display gamut mapping is separate renderer work.
 - [ ] Math values: validate and serialize accepted expressions through shared
   native handling, preserving specified-value semantics. This is the largest
   remaining uncertainty in the native prerequisite work.
@@ -2316,6 +2317,34 @@ group. The renderer's documented gamut-mapping limitation also applies to
 out-of-gamut `color(srgb ...)`; specified-value readback does not clip those
 coordinates. Display gamut mapping remains separate renderer work. The historical
 Duktape style placeholder has no serializer to reuse here.
+
+### Extended HSL/HWB legacy readback (2026-10-13)
+
+The earlier out-of-gamut guard rejected readback for accepted values such as
+`hsl(30 200% 40%)`. That could also prevent serializing an entire edited style
+block containing one of those colors. The guard was stricter than
+[CSS Color 4 section 16.2.2](https://drafts.csswg.org/css-color-4/#serializing-sRGB-values):
+ordinary HSL/HWB serialization uses bounded legacy RGB coordinates. Clamp at
+that boundary while retaining fractional channels and alpha; do not read them
+back from the painter's quantized bytecode. For example, `hwb(0 -10% 10%)`
+reads back as `rgb(229.5, 0, 0)`.
+
+This corrects the earlier assumption that these particular legacy readbacks
+must preserve extended coordinates. Explicit `color(srgb ...)` and HSL/HWB
+containing missing components use their separate serialization rules and still
+preserve their extended coordinates. Parsing and painting are unchanged;
+the display gamut-mapping backlog remains open.
+
+Regressions cover whole/chunked parsing, fractional channels, alpha, extended
+saturation/lightness/white/black values, border/background shorthands, gradients,
+SVG paint readback and unrelated style edits. Extreme inputs also exercise
+infinite conversion intermediates without overflowing the bounded formatter.
+All 89 selected native suites pass in Debug and Release, including Debug
+ASan/UBSan and LeakSanitizer. All 15 selected Debug Qt suites and 12 applicable
+Release Qt suites pass, including the existing 67 color pixel samples. Builds
+are warning-free; no GTK builds ran.
+This closes the color portion of the finite color/font group; system-font
+declaration state is the remaining part of that group.
 
 ## Assessment
 

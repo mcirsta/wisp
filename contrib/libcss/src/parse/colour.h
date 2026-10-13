@@ -13,8 +13,8 @@
 bool css__parse_colour_function(lwc_string *name, const parserutils_vector *vector, int32_t *ctx, uint32_t *result);
 
 /* Specified named/hex/RGB/HSL/HWB/Lab/LCH/color(srgb) colours and border-color components,
- * preserving missing components. Out-of-gamut HSL/HWB conversions and other functions
- * remain explicitly unsupported, as in declaration_value.h. */
+ * preserving missing components and applying each form's serialization range.
+ * Other functions remain explicitly unsupported, as in declaration_value.h. */
 css_error css__declaration_colour_serialize(const css_declaration_contribution *value, lwc_string **out);
 
 #endif

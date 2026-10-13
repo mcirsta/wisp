@@ -46,6 +46,8 @@ static const struct {
     const char *input, *expected;
     bool pending; /* Partial pending shorthands serialize empty longhands, not round-trippable values. */
 } cases[] = {
+    {"background:linear-gradient(hsl(30 200 40),hwb(0 -10 10));border:solid hsl(30 200 40)!important",
+        "background: linear-gradient(rgb(255, 102, 0), rgb(229.5, 0, 0)); border: solid rgb(255, 102, 0) !important;"},
     {"background:linear-gradient(rgb(none 255 0),color(srgb 0 0 100%)) color(srgb .5 0 0);"
      "border:solid color(srgb 50% .25 none / 50%)!important",
         "background: linear-gradient(color(srgb none 1 0), color(srgb 0 0 1)) color(srgb 0.5 0 0); "

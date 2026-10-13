@@ -581,10 +581,6 @@ static css_error serialize_coordinates(enum colour_function function, const stru
 
 static css_error serialize_rgb(const struct colour_value *colour, lwc_string **out)
 {
-    for (size_t i = 0; i < 3; i++) {
-        if (!isfinite(colour->channels[i]) || colour->channels[i] < 0 || colour->channels[i] > 255)
-            return CSS_INVALID; /* Do not freeze the painter's out-of-gamut clipping into CSSOM. */
-    }
     bool opaque = floor(colour->channels[3] * 1000000 + 0.5) == 1000000;
     char buffer[80]; /* Four bounded numbers, separators and function delimiters. */
     size_t used = (size_t)sprintf(buffer, "%s(", opaque ? "rgb" : "rgba");
@@ -593,7 +589,12 @@ static css_error serialize_rgb(const struct colour_value *colour, lwc_string **o
             buffer[used++] = ',';
             buffer[used++] = ' ';
         }
-        used += number(buffer + used, colour->channels[i]);
+        /* CSS Color 4 section 16.2.2 requires bounded legacy RGB readback,
+         * even when HSL/HWB conversion exceeds that range. Clamp here without
+         * quantizing through the painter's ARGB8. Explicit color(srgb) and
+         * missing components take separate serializers and retain their range. */
+        double channel = i == 3 ? colour->channels[i] : fmax(0, fmin(255, colour->channels[i]));
+        used += number(buffer + used, channel);
     }
     buffer[used++] = ')';
     return lwc_intern_string(buffer, used, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;

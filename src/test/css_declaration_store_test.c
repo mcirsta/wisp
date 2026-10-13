@@ -315,6 +315,31 @@ START_TEST(test_srgb_values_survive_edits)
 }
 END_TEST
 
+START_TEST(test_extended_polar_values_survive_edits)
+{
+    css_declaration_store *store = create("background:linear-gradient(hsl(30 200 40),hwb(0 -10 10));"
+        "border:2px solid hsl(30 200 40)!important;color:color(srgb 1.2 .4 -.1);opacity:1", _i != 0);
+    ck_assert(set(store, "opacity:.5", _i != 0));
+    check_value(store, "background-image", "linear-gradient(rgb(255, 102, 0), rgb(229.5, 0, 0))", false);
+    check_value(store, "border-color", "rgb(255, 102, 0)", true);
+    ck_assert(set(store, "border-left-color:hwb(0 -10 10 / 50%)", _i != 0));
+    check_value(store, "border-left-color", "rgba(229.5, 0, 0, 0.5)", false);
+    check_value(store, "border-right-color", "rgb(255, 102, 0)", true);
+    /* Legacy bounded readback must not clamp explicit color(srgb) or erase
+     * fractional coordinates when the entire block is synchronized. */
+    lwc_string *text;
+    ck_assert_int_eq(css__declaration_store_serialize(store, &text), CSS_OK);
+    css_declaration_store *copy = create(lwc_string_data(text), _i != 0);
+    check_text(copy, lwc_string_data(text));
+    check_value(copy, "color", "color(srgb 1.2 0.4 -0.1)", false);
+    check_value(copy, "border-left-color", "rgba(229.5, 0, 0, 0.5)", false);
+    check_value(copy, "border-right-color", "rgb(255, 102, 0)", true);
+    lwc_string_unref(text);
+    css__declaration_store_destroy(copy);
+    css__declaration_store_destroy(store);
+}
+END_TEST
+
 START_TEST(test_native_state_survives_readback_limits)
 {
     css_declaration_store *store = create("margin:var(--m);width:calc(100% - 2px);color:red", false);
@@ -445,6 +470,9 @@ static const struct {
     const char *name, *value, *priority, *expected;
     bool important;
 } inputs[] = {
+    {"color", "hsl(30 200 40)", "", "rgb(255, 102, 0)"},
+    {"background-color", "hwb(0 -10 10 / 50%)", "", "rgba(229.5, 0, 0, 0.5)"},
+    {"border", "solid hsl(30 200 40)", "important", "solid rgb(255, 102, 0)", true},
     {"color", "rgb(none 50% 255 / none)", "", "color(srgb none 0.5 1 / none)"},
     {"background-color", "COLOR(SRGB 25% +0 .5 / 50%)", "", "color(srgb 0.25 0 0.5 / 0.5)"},
     {"border", "solid color(srgb 1 none 0)", "important", "solid color(srgb 1 none 0)", true},
@@ -884,6 +912,7 @@ int main(void)
     tcase_add_loop_test(tc, test_aural_values_survive_edits, 0, 2);
     tcase_add_loop_test(tc, test_lab_values_survive_edits, 0, 2);
     tcase_add_loop_test(tc, test_srgb_values_survive_edits, 0, 2);
+    tcase_add_loop_test(tc, test_extended_polar_values_survive_edits, 0, 2);
     tcase_add_test(tc, test_native_state_survives_readback_limits);
     tcase_add_test(tc, test_length_and_borrowed_names);
     tcase_add_test(tc, test_repeated_edits_release_sources);

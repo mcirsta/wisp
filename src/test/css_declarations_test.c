@@ -1655,9 +1655,25 @@ static const struct {
     {"color:hsl(0 100% 50% / 10000000)", "color", "rgb(255, 0, 0)"},
     {"color:hsl(0 100% 50% / -1)", "color", "rgba(255, 0, 0, 0)"},
     {"color:hsl(0/**/100%/**/50%)", "color", "rgb(255, 0, 0)"},
-    {"color:hsl(30 200% 50%)", "color", NULL},
-    {"color:hsl(0 0% 110%)", "color", NULL},
-    {"color:hsl(0 0% -10%)", "color", NULL},
+    {"color:hsl(30 200% 50%)", "color", "rgb(255, 127.5, 0)"},
+    {"color:hsl(30,200%,40%)", "color", "rgb(255, 102, 0)"},
+    {"color:hsla(210 200 60 / 50%)", "color", "rgba(0, 153, 255, 0.5)"},
+    {"color:hsl(0 200% 110%)", "color", "rgb(229.5, 255, 255)"},
+    {"color:hsl(0 200% -10%)", "color", "rgb(0, 25.5, 25.5)"},
+    {"color:hsl(30 100.000001% 50% / .1234567)", "color", "rgba(255, 127.5, 0, 0.123457)"},
+    {"color:hwb(0 10% -10%)", "color", "rgb(255, 25.5, 25.5)"},
+    {"color:hwb(0 200% -100%)", "color", "rgb(255, 255, 255)"},
+    {"color:hwb(0 -100% 200%)", "color", "rgb(0, 0, 0)"},
+    {"color:hwb(0 -.000001% 0)", "color", "rgb(255, 0, 0)"},
+    {"color:hwb(240 -10 -10 / .5)", "color", "rgba(0, 0, 255, 0.5)"},
+    {"border-color:hsl(30 200 40) hwb(0 -10 10)", "border-color", "rgb(255, 102, 0) rgb(229.5, 0, 0)"},
+    {"outline:2px solid hsl(30 200 40)", "outline", "rgb(255, 102, 0) solid 2px"},
+    {"fill:hsl(30 200 40)", "fill", "rgb(255, 102, 0)"},
+    {"stroke:hwb(0 -10 10)", "stroke", "rgb(229.5, 0, 0)"},
+    {"background:linear-gradient(hsl(30 200 40),hwb(0 -10 10)) hsl(30 200 40)", "background",
+        "linear-gradient(rgb(255, 102, 0), rgb(229.5, 0, 0)) rgb(255, 102, 0)"},
+    {"color:hsl(0 0% 110%)", "color", "rgb(255, 255, 255)"},
+    {"color:hsl(0 0% -10%)", "color", "rgb(0, 0, 0)"},
     {"color:hsl(none 100% 50%)", "color", "hsl(none 100% 50%)"},
     {"color:hsla(120 none 50% / none)", "color", "hsl(120 none 50% / none)"},
     {"color:hwb(none none none)", "color", "hwb(none none none)"},
@@ -1706,7 +1722,7 @@ static const struct {
     {"color:hwb(0 100000000 50000000)", "color", "rgb(170, 170, 170)"},
     {"color:hwb(0 0% 0% / 100000000%)", "color", "rgb(255, 0, 0)"},
     {"color:hwb(0 0% 0% / -100%)", "color", "rgba(255, 0, 0, 0)"},
-    {"color:hwb(0 -10% 10%)", "color", NULL},
+    {"color:hwb(0 -10% 10%)", "color", "rgb(229.5, 0, 0)"},
     {"border-color:hsl(0,100%,50%) hwb(120 0 0)", "border-color", "rgb(255, 0, 0) rgb(0, 255, 0)"},
     {"border-color:hsl(0,100%,50%);border-left-color:rgb(255 0 0)", "border-color", "rgb(255, 0, 0)"},
     {"border-color:hwb(0 0 0)!important;border-right-color:blue", "border-color", "rgb(255, 0, 0)"},
@@ -2841,6 +2857,42 @@ START_TEST(test_missing_colour_roundtrip)
             css__declaration_list_destroy(list);
             css__declaration_list_destroy(again);
         }
+    }
+}
+END_TEST
+
+/* Extremely large accepted coordinates must not overflow the bounded legacy
+ * serializer, including infinite intermediates from finite HSL inputs. */
+START_TEST(test_extreme_polar_readback)
+{
+    char huge[351];
+    memset(huge, '9', sizeof(huge) - 1);
+    huge[sizeof(huge) - 1] = 0;
+    static const struct { const char *format, *expected; } cases[] = {
+        {"color:hsl(30 %s %s)", "rgb(0, 255, 255)"},
+        {"color:hsl(30 %s -%s)", "rgb(0, 0, 255)"},
+        {"color:hsl(30 -%s %s)", "rgb(255, 255, 255)"},
+        {"color:hwb(0 %s %s)", "rgb(127.5, 127.5, 127.5)"},
+        {"color:hwb(0 -%s -%s)", "rgb(255, 0, 0)"},
+    };
+    for (size_t i = 0; i < N_ELEMENTS(cases); i++) {
+        char css[768];
+        snprintf(css, sizeof(css), cases[i].format, huge, huge);
+        css_declaration_list *list = parse(css, _i != 0);
+        css_declaration_order *order;
+        ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+        lwc_string *value;
+        css_error error = serialize_property(order, "color", &value);
+        ck_assert_msg(error == CSS_OK, "extreme color %zu chunks %d: %d", i, _i, error);
+        ck_assert_msg(strcmp(lwc_string_data(value), cases[i].expected) == 0,
+            "extreme color %zu: expected %s, got %s", i, cases[i].expected, lwc_string_data(value));
+        snprintf(css, sizeof(css), "color:%s", lwc_string_data(value));
+        css_declaration_list *again = parse(css, _i != 0);
+        compare_sheets(css__declaration_list_sheet(list), css__declaration_list_sheet(again));
+        lwc_string_unref(value);
+        css__declaration_order_destroy(order);
+        css__declaration_list_destroy(again);
+        css__declaration_list_destroy(list);
     }
 }
 END_TEST
@@ -4827,6 +4879,7 @@ int main(void)
     tcase_add_loop_test(tc, test_missing_colour_roundtrip, 0, 2);
     tcase_add_loop_test(tc, test_colour_rendering_values, 0, 2);
     tcase_add_loop_test(tc, test_missing_rgb_precision, 0, 2);
+    tcase_add_loop_test(tc, test_extreme_polar_readback, 0, 2);
     tcase_add_loop_test(tc, test_colour_invalid, 0, 2);
     tcase_add_loop_test(tc, test_unsupported_colour_fallbacks, 0, 2);
     tcase_add_loop_test(tc, test_flex_invalid, 0, 2);
