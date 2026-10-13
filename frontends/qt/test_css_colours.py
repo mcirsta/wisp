@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 
-WIDTH, HEIGHT = 520, 430
+WIDTH, HEIGHT = 520, 610
 # CSS Color 4 clamping and nearest-integer rounding for the ARGB8 painter.
 # Sample flat interiors so text, antialiasing and edge coverage cannot affect them.
 SAMPLES = [
@@ -52,6 +52,21 @@ SAMPLES = [
     ("missing HSL lightness paints as zero", 250, 390, (0, 0, 0)),
     ("missing HWB whiteness paints as zero", 350, 390, (0, 204, 0)),
     ("missing HWB blackness paints as zero", 450, 390, (51, 51, 255)),
+    ("lab-gray", 50, 450, (119, 119, 119)),
+    ("lch-gray", 150, 450, (119, 119, 119)),
+    ("lab-alpha", 250, 450, (187, 187, 187)),
+    ("oklab-gray", 350, 450, (99, 99, 99)),
+    ("oklab-alpha", 450, 450, (177, 177, 177)),
+    ("lab-red", 50, 510, (255, 0, 0)),
+    ("lab-blue", 150, 510, (0, 0, 255)),
+    ("oklab-red", 250, 510, (255, 0, 0)),
+    ("oklch-red", 350, 510, (255, 0, 0)),
+    ("lch-negative-chroma", 450, 510, (119, 119, 119)),
+    ("lab-high-lightness", 50, 570, (255, 255, 255)),
+    ("lab-low-lightness", 150, 570, (0, 0, 0)),
+    ("lab-missing-alpha", 250, 570, (255, 255, 255)),
+    ("lch-length-fallback", 350, 570, (0, 34, 68)),
+    ("oklch-percent-fallback", 450, 570, (0, 34, 68)),
 ]
 
 binary = Path(sys.argv[1]).resolve()

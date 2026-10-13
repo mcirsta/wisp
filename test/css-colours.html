@@ -56,6 +56,22 @@ html, body { margin: 0; background: white; }
 #missing-lightness { left:210px; top:370px; background:hsl(120 100% none); }
 #missing-white { left:310px; top:370px; background:hwb(120 none 20%); }
 #missing-black { left:410px; top:370px; background:hwb(240 20% none); }
+/* Lab D50 neutral colors, Oklab D65 colors, alpha and invalid-hue fallback. */
+#lab-gray { left:10px; top:430px; background:#024; background:lab(50% 0 0); }
+#lch-gray { left:110px; top:430px; background:#024; background:lch(50% 0 270deg); }
+#lab-alpha { left:210px; top:430px; background:lab(50 0 0 / .5); }
+#oklab-gray { left:310px; top:430px; background:#024; background:oklab(50% 0 0); }
+#oklab-alpha { left:410px; top:430px; background:oklab(50% 0 0 / 50%); }
+#lab-red { left:10px; top:490px; background:#024; background:lab(54.290543 80.80492 69.890988); }
+#lab-blue { left:110px; top:490px; background:#024; background:lab(29.567 68.298 -112.0294); }
+#oklab-red { left:210px; top:490px; background:#024; background:oklab(.62795536 .22486306 .12584630); }
+#oklch-red { left:310px; top:490px; background:#024; background:oklch(62.795536% .25768331 29.233885); }
+#lch-negative-chroma { left:410px; top:490px; background:#024; background:lch(50 -10 90); }
+#lab-high-lightness { left:10px; top:550px; background:#024; background:lab(150 80 80); }
+#lab-low-lightness { left:110px; top:550px; background:#024; background:lab(-20 80 80); }
+#lab-missing-alpha { left:210px; top:550px; background:lab(50 none none / none); }
+#lch-length-fallback { left:310px; top:550px; background:#024; background:lch(50 20 30px); }
+#oklch-percent-fallback { left:410px; top:550px; background:#024; background:oklch(50% 20% 20%); }
 </style>
 <div id="hex" class="case"></div><div id="fraction" class="case"></div>
 <div id="mixed" class="case"></div><div id="alpha" class="case"></div>
@@ -82,3 +98,18 @@ html, body { margin: 0; background: white; }
 <div id="missing-hue" class="case"></div><div id="missing-saturation" class="case"></div>
 <div id="missing-lightness" class="case"></div><div id="missing-white" class="case"></div>
 <div id="missing-black" class="case"></div>
+<div id="lab-gray" class="case"></div>
+<div id="lch-gray" class="case"></div>
+<div id="lab-alpha" class="case"></div>
+<div id="oklab-gray" class="case"></div>
+<div id="oklab-alpha" class="case"></div>
+<div id="lab-red" class="case"></div>
+<div id="lab-blue" class="case"></div>
+<div id="oklab-red" class="case"></div>
+<div id="oklch-red" class="case"></div>
+<div id="lch-negative-chroma" class="case"></div>
+<div id="lab-high-lightness" class="case"></div>
+<div id="lab-low-lightness" class="case"></div>
+<div id="lab-missing-alpha" class="case"></div>
+<div id="lch-length-fallback" class="case"></div>
+<div id="oklch-percent-fallback" class="case"></div>

@@ -1302,7 +1302,7 @@ static const struct {
         "linear-gradient(red, blue)"},
     {"background-image:linear-gradient(var(--Stop),BLUE)", "background-image", "linear-gradient(var(--Stop),BLUE)"},
     /* These colour families still require specified-value serializers. */
-    {"background-image:linear-gradient(lab(50% 0 0),blue)", "background-image", NULL},
+    {"background-image:linear-gradient(lab(50% 0 0),blue)", "background-image", "linear-gradient(lab(50 0 0), blue)"},
     {"background-image:linear-gradient(rgb(none 0 0),blue)", "background-image", NULL},
     {"background:none", "background", "none"},
     {"background:transparent", "background", "none"},
@@ -1691,10 +1691,42 @@ static const struct {
     {"border-color:hsl(0,100%,50%) hwb(120 0 0)", "border-color", "rgb(255, 0, 0) rgb(0, 255, 0)"},
     {"border-color:hsl(0,100%,50%);border-left-color:rgb(255 0 0)", "border-color", "rgb(255, 0, 0)"},
     {"border-color:hwb(0 0 0)!important;border-right-color:blue", "border-color", "rgb(255, 0, 0)"},
-    {"color:lab(50% 0 0)", "color", NULL},
-    {"color:oklab(50% 0 0)", "color", NULL},
-    {"color:lch(50% 10 0)", "color", NULL},
-    {"color:oklch(50% 0.1 0)", "color", NULL},
+    {"color:lab(50 -0.0000005 0)", "color", "lab(50 0 0)"},
+    {"color:lab(50 -0.00000050001 0)", "color", "lab(50 -0.000001 0)"},
+    {"color:lab(50 -0.00000049999 0)", "color", "lab(50 0 0)"},
+    {"color:lab(50 0.99999999999% -0.99999999999%)", "color", "lab(50 1.25 -1.25)"},
+    {"color:lch(50 2% 359.9999999)", "color", "lch(50 3 0)"},
+    {"color:lab(50 -999999999999999999.9999999% 0)", "color", "lab(50 -1250000000000000000 0)"},
+    {"color:lab(50 10000000000000000000000000000000000000000000000000"
+        "00000000000000000000000000000000000000000000000000000000000 0)", "color",
+        "lab(50 10000000000000000000000000000000000000000000000000"
+        "00000000000000000000000000000000000000000000000000000000000 0)"},
+    {"color:LAB(56.200% 0.000 66.88%)", "color", "lab(56.2 0 83.6)"},
+    {"color:lab(50 -100% 100%)", "color", "lab(50 -125 125)"},
+    {"color:lab(120 -200 180 / 150%)", "color", "lab(100 -200 180)"},
+    {"color:lab(-20 -1.23456789 2 / -1)", "color", "lab(0 -1.234568 2 / 0)"},
+    {"color:lab(none 10% none / none)", "color", "lab(none 12.5 none / none)"},
+    {"color:lch(37% 105.0 305.00)", "color", "lch(37 105 305)"},
+    {"color:lch(50% 100% -90deg / 93%)", "color", "lch(50 150 270 / 0.93)"},
+    {"color:lch(50 -1.234567 1.25turn)", "color", "lch(50 0 90)"},
+    {"color:lch(none none none)", "color", "lch(none none none)"},
+    {"color:lch(60 20 100grad)", "color", "lch(60 20 90)"},
+    {"color:oklab(54% -25% -5%)", "color", "oklab(0.54 -0.1 -0.02)"},
+    {"color:oklab(200% -1 1 / .5)", "color", "oklab(1 -1 1 / 0.5)"},
+    {"color:oklab(-.5 none none)", "color", "oklab(0 none none)"},
+    {"color:oklch(56.43% 0.0900 123.40)", "color", "oklch(0.5643 0.09 123.4)"},
+    {"color:oklch(.5 100% -450deg / none)", "color", "oklch(0.5 0.4 270 / none)"},
+    {"color:oklch(50% -25% none)", "color", "oklch(0.5 0 none)"},
+    {"color:oklch(50% 20% 1000000000.25turn)", "color", "oklch(0.5 0.08 90)"},
+    {"color:lab(50 .0000004% -.0000004%)", "color", "lab(50 0.000001 0)"},
+    {"color:lch(50 .000001% 0)", "color", "lch(50 0.000002 0)"},
+    {"color:oklab(50% .000125% -.000125%)", "color", "oklab(0.5 0.000001 0)"},
+    {"color:lab(50 12345678901234567890.1234567 0)", "color", "lab(50 12345678901234567890.123457 0)"},
+    {"color:lab(50 12345678901234567890.1234567% 0)", "color", "lab(50 15432098626543209862.654321 0)"},
+    {"color:lab(50% 0 0)", "color", "lab(50 0 0)"},
+    {"color:oklab(50% 0 0)", "color", "oklab(0.5 0 0)"},
+    {"color:lch(50% 10 0)", "color", "lch(50 10 0)"},
+    {"color:oklch(50% 0.1 0)", "color", "oklch(0.5 0.1 0)"},
     {"color:red; color:color(srgb 0 0 1)", "color", "red"},
     {"background-color:#123", "background-color", "rgb(17, 34, 51)"},
     {"outline-color:INVERT", "outline-color", "invert"},
@@ -1810,7 +1842,7 @@ static const struct {
     {"border:calc(1px + 2px) solid red", "border", NULL},
     {"border:calc(1px + 2px) solid red", "border-left-color", "red"},
     {"border:solid oklch(50% .1 0)", "border-left-width", "medium"},
-    {"border:solid oklch(50% .1 0)", "border-left-color", NULL},
+    {"border:solid oklch(50% .1 0)", "border-left-color", "oklch(0.5 0.1 0)"},
     {"border-top:none", "border-top", "none"},
     {"border-top:solid", "border-top", "solid"},
     {"border-top:THICK", "border-top", "thick"},
@@ -1836,7 +1868,7 @@ static const struct {
     {"border-top:calc(1px + 2px) solid red", "border-top", NULL},
     {"border-top:calc(1px + 2px) solid red", "border-top-color", "red"},
     {"border-top:solid oklch(50% .1 0)", "border-top-width", "medium"},
-    {"border-top:solid oklch(50% .1 0)", "border-top-color", NULL},
+    {"border-top:solid oklch(50% .1 0)", "border-top-color", "oklch(0.5 0.1 0)"},
     {"border-right:none", "border-right", "none"},
     {"border-right:solid", "border-right", "solid"},
     {"border-right:THICK", "border-right", "thick"},
@@ -1862,7 +1894,7 @@ static const struct {
     {"border-right:calc(1px + 2px) solid red", "border-right", NULL},
     {"border-right:calc(1px + 2px) solid red", "border-right-color", "red"},
     {"border-right:solid oklch(50% .1 0)", "border-right-width", "medium"},
-    {"border-right:solid oklch(50% .1 0)", "border-right-color", NULL},
+    {"border-right:solid oklch(50% .1 0)", "border-right-color", "oklch(0.5 0.1 0)"},
     {"border-bottom:none", "border-bottom", "none"},
     {"border-bottom:solid", "border-bottom", "solid"},
     {"border-bottom:THICK", "border-bottom", "thick"},
@@ -1888,7 +1920,7 @@ static const struct {
     {"border-bottom:calc(1px + 2px) solid red", "border-bottom", NULL},
     {"border-bottom:calc(1px + 2px) solid red", "border-bottom-color", "red"},
     {"border-bottom:solid oklch(50% .1 0)", "border-bottom-width", "medium"},
-    {"border-bottom:solid oklch(50% .1 0)", "border-bottom-color", NULL},
+    {"border-bottom:solid oklch(50% .1 0)", "border-bottom-color", "oklch(0.5 0.1 0)"},
     {"border-left:none", "border-left", "none"},
     {"border-left:solid", "border-left", "solid"},
     {"border-left:THICK", "border-left", "thick"},
@@ -1914,7 +1946,7 @@ static const struct {
     {"border-left:calc(1px + 2px) solid red", "border-left", NULL},
     {"border-left:calc(1px + 2px) solid red", "border-left-color", "red"},
     {"border-left:solid oklch(50% .1 0)", "border-left-width", "medium"},
-    {"border-left:solid oklch(50% .1 0)", "border-left-color", NULL},
+    {"border-left:solid oklch(50% .1 0)", "border-left-color", "oklch(0.5 0.1 0)"},
     {"outline:none", "outline", "none"},
     {"outline:solid", "outline", "solid"},
     {"outline:THICK", "outline", "thick"},
@@ -1940,7 +1972,7 @@ static const struct {
     {"outline:calc(1px + 2px) solid red", "outline", NULL},
     {"outline:calc(1px + 2px) solid red", "outline-color", "red"},
     {"outline:solid oklch(50% .1 0)", "outline-width", "medium"},
-    {"outline:solid oklch(50% .1 0)", "outline-color", NULL},
+    {"outline:solid oklch(50% .1 0)", "outline-color", "oklch(0.5 0.1 0)"},
     {"column-rule:none", "column-rule", "none"},
     {"column-rule:solid", "column-rule", "solid"},
     {"column-rule:THICK", "column-rule", "thick"},
@@ -1966,7 +1998,7 @@ static const struct {
     {"column-rule:calc(1px + 2px) solid red", "column-rule", NULL},
     {"column-rule:calc(1px + 2px) solid red", "column-rule-color", "red"},
     {"column-rule:solid oklch(50% .1 0)", "column-rule-width", "medium"},
-    {"column-rule:solid oklch(50% .1 0)", "column-rule-color", NULL},
+    {"column-rule:solid oklch(50% .1 0)", "column-rule-color", "oklch(0.5 0.1 0)"},
     {"border:2px solid red;border-left-color:blue", "border", ""},
     {"border:2px solid red;border-left-color:blue", "border-left", "2px solid blue"},
     {"border:2px solid red;border-left-width:3px", "border-width", "2px 2px 2px 3px"},
@@ -2791,6 +2823,25 @@ END_TEST
 START_TEST(test_colour_rendering_values)
 {
     static const struct { const char *value; uint32_t packed; } cases[] = {
+        {"lab(50% 0 0)", 0xff777777},
+        {"lch(50% 0 270deg)", 0xff777777},
+        {"lab(100 0 0)", 0xffffffff},
+        {"lab(-50 80 80)", 0xff000000},
+        {"lab(150 80 80)", 0xffffffff},
+        {"lab(50 0 0 / .5)", 0x80777777},
+        {"lab(50 0 0 / .1)", 0x1a777777},
+        {"lab(50 none none / none)", 0x00777777},
+        {"lab(none 20 20)", 0xff000000},
+        {"oklab(50% 0 0)", 0xff636363},
+        {"oklch(.5 0 0 / 50%)", 0x80636363},
+        {"oklab(80% none none)", 0xffbebebe},
+        {"oklch(50% -20% 30)", 0xff636363},
+        {"oklab(0 1 1)", 0xff000000},
+        {"oklab(10 1 1)", 0xffffffff},
+        {"lab(29.567 68.298 -112.0294)", 0xff0000ff},
+        {"lab(54.290543 80.80492 69.890988)", 0xffff0000},
+        {"oklab(.62795536 .22486306 .12584630)", 0xffff0000},
+        {"oklch(62.795536% .25768331 29.233885)", 0xffff0000},
         {"rgb(50%,0%,100%)", 0xff8000ff},
         {"rgb(1.5,2.5,3.5)", 0xff020304},
         {"rgb(1 50% 2.5 / .5)", 0x80018003},
@@ -2892,6 +2943,26 @@ END_TEST
 START_TEST(test_colour_invalid)
 {
     static const char *const values[] = {
+        "lab(1px 0 0)",
+        "lab(50 1px 0)",
+        "lab(50 0 10deg)",
+        "lab(50,0,0)",
+        "lab(50 0 0 .5)",
+        "lab(50 0 0 /)",
+        "lab(50 0 0 / 1px)",
+        "lab(50 0 0 / none extra)",
+        "oklab(50% 0 0, .5)",
+        "lch(50 20 30px)",
+        "lch(50 20 20%)",
+        "lch(50px 20 0)",
+        "lch(50 20px 0)",
+        "lch(50 20 0 / .5,)",
+        "oklch(50% 20% 1hz)",
+        "oklch(50% 20% 20%)",
+        "lch(50 20)",
+        "lch(50 20 0 1)",
+        "lab(from red l a b)",
+        "lab(calc(50) 0 0)",
         "rgb(1%,2,3)", "rgb(none,0,0)", "rgba(0,0,0,none)", "rgb(1 2 3,.5)", "rgb(1,2,3/.5)",
         "rgb(1 2 3 4)", "rgb(1 2)", "rgba(1,2,3,4,)", "rgb(1 2 3 / .5 /)", "rgb(1 2 3 /)",
         "rgb(1 2 3 / .5 extra)", "rgb(1,2,3,)", "rgb(1,2,3,.5,)", "rgb(1,2,3,.5,.6)",
@@ -3929,6 +4000,8 @@ START_TEST(test_property_payload_important)
         "stroke-width:32768px", "stroke-width:2", "stroke-width:3%", "stroke-width:initial",
         "fill-opacity:.5", "stroke-opacity:.25",
         "cursor:auto", "cursor:url(Cur.cur),url(Other.cur),pointer",
+        "color:lab(50 10 20 / .5)", "fill:oklab(.5 .1 -.1)", "stroke:lch(50 10 -90deg)",
+        "outline-color:oklch(50% 20% 100grad / none)",
         "azimuth:behind left", "azimuth:-90deg", "elevation:20grad", "pause-before:20ms", "pause-after:30%",
         "pause-before:initial", "pause-after:inherit",
         "pitch:2khz", "pitch-range:50", "richness:50", "stress:50", "speech-rate:120", "volume:50%", "volume:50",
@@ -4555,7 +4628,7 @@ START_TEST(test_value_allocation_failure)
         "fill", "stroke", "fill-opacity", "stroke-opacity", "stroke-width", "cursor",
         "azimuth", "elevation", "pause-before", "pause-after", "pitch-range", "pitch", "play-during", "richness",
         "speech-rate", "stress", "voice-family", "volume",
-        "cue", "pause"};
+        "cue", "pause", "color", "color", "color", "color"};
     const char *name = names[_i];
     void (*limit)(unsigned) = _i == 37 ? calloc_limit : malloc_limit;
     /* Keep full-border inputs separate: they reset the quad style/colour cases. */
@@ -4581,12 +4654,21 @@ START_TEST(test_value_allocation_failure)
               "fill-opacity:.1234567;stroke-opacity:.7654321;stroke-width:12.3456789em";
     if (strcmp(name, "cursor") == 0)
         css = "cursor:url('Cursor.cur'),url('Other.png'),POINTER";
-    if (_i >= 47)
+    if (_i >= 47 && _i < 61)
         css = "azimuth:behind left;elevation:1.2345678deg;pause-before:123.456789ms;pause-after:1.2345678s;"
               "pitch-range:12.3456789;pitch:1.2345678khz;play-during:url('a b.ogg') repeat mix;richness:23.4567891;"
               "speak-header:ONCE;speak-numeral:DIGITS;speak-punctuation:CODE;speak:NONE;"
               "speech-rate:123.4567891;stress:34.5678912;voice-family:One Two,MALE;volume:45.6789123%;"
               "cue:url('a b.ogg') none;pause:123.456789ms 12.3456789%;";
+    if (_i >= 61) {
+        static const char *const lab_cases[] = {
+            "color:lab(56.7891234% -123.456789% 66.88% / .23456789)",
+            "color:lch(56.7891234% 12345678901234567890.1234567% -90deg / .23456789)",
+            "color:oklab(56.7891234% -.000125% 123456789.1234567% / .23456789)",
+            "color:oklch(none -12.34% none / none)",
+        };
+        css = lab_cases[_i - 61];
+    }
     css_declaration_list *list = parse(css, false);
     css_declaration_order *order;
     ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
@@ -4684,7 +4766,7 @@ int main(void)
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 61);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 65);
     tcase_add_loop_test(tc, test_position_rollback, 0, 2);
     tcase_add_loop_test(tc, test_font_rollback, 0, 5);
     tcase_add_loop_test(tc, test_gap_rollback, 0, 4);

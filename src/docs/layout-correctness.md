@@ -185,6 +185,17 @@ whole-image opacity workaround. Older frontends also need an alpha-support
 audit when they are next tested; the obsolete plot-style opacity fields were
 only interpreted by Qt.
 
+## Display color gamut mapping
+
+Existing feature limitation confirmed in the color conversion code: out-of-gamut
+colors such as `lab(50 100 100)` reach per-channel sRGB clipping. CSS Color 4
+[display gamut mapping](https://drafts.csswg.org/css-color-4/#css-gamut-mapping)
+requires mapping that preserves perceptual appearance. The recent Lab parser
+cleanup corrects syntax, precision and white-point conversion; it does not
+implement general gamut mapping. Specified-value readback preserves the original
+coordinates and is independent of this display limitation. Treat gamut mapping
+as renderer work, not another prerequisite for live inline-style editing.
+
 ## JavaScript-driven HotNews sidebar (deferred)
 
 The live article sidebar headed "Ultima oră" stays on its loading placeholders.

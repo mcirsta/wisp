@@ -55,7 +55,8 @@ static bool digit(char ch)
  * ten fractional bits, and strtod/snprintf would introduce locale and binary
  * rounding differences. The current property parser does not accept exponents.
  * This is serialization after validation, not another property parser. */
-static css_error serialize_numeric(const css_declaration_token *token, const char *default_unit, lwc_string **out)
+static css_error serialize_numeric(
+    const css_declaration_token *token, const char *default_unit, bool ties_up, lwc_string **out)
 {
     const char *text = lwc_string_data(token->text);
     size_t length = lwc_string_length(token->text);
@@ -85,7 +86,7 @@ static css_error serialize_numeric(const css_declaration_token *token, const cha
         used += whole_end - first;
     }
     size_t fraction = used;
-    bool round_up = false;
+    bool round_up = false, negative_tie = false;
     if (pos < length && text[pos] == '.') {
         buffer[used++] = '.';
         pos++;
@@ -94,8 +95,12 @@ static css_error serialize_numeric(const css_declaration_token *token, const cha
             size_t offset = pos - start;
             if (offset < 6)
                 buffer[used++] = text[pos];
-            else if (offset == 6)
-                round_up = text[pos] >= '5';
+            else if (offset == 6) {
+                negative_tie = ties_up && negative && text[pos] == '5';
+                round_up = text[pos] >= '5' && !negative_tie;
+            } else if (negative_tie && text[pos] != '0') {
+                round_up = true;
+            }
             pos++;
         }
     }
@@ -152,50 +157,84 @@ static css_error serialize_numeric(const css_declaration_token *token, const cha
 
 css_error css__declaration_numeric_serialize(const css_declaration_token *token, bool length_value, lwc_string **out)
 {
-    return serialize_numeric(token, length_value ? "px" : NULL, out);
+    return serialize_numeric(token, length_value ? "px" : NULL, false, out);
 }
 
-css_error css__declaration_numeric_divide(
-    const css_declaration_token *token, unsigned int places, const char *unit, lwc_string **out)
+/* Scale the decimal coefficient as digits, then place its decimal point.
+ * Multiplication and unit conversion precede rounding; large authored values
+ * never pass through double or rendering fixed point. */
+static css_error numeric_scaled(const css_declaration_token *token, unsigned multiplier, unsigned places,
+    const char *unit, bool ties_up, lwc_string **out)
 {
     const char *text = lwc_string_data(token->text);
     size_t length = lwc_string_length(token->text);
-    if (length > SIZE_MAX - places - 2)
+    if (length > SIZE_MAX - places - 16)
         return CSS_NOMEM;
-    char *buffer = malloc(length + places + 2);
+    size_t capacity = length + places + 16;
+    char *buffer = malloc(capacity);
     if (buffer == NULL)
         return CSS_NOMEM;
     size_t first = (text[0] == '+' || text[0] == '-') ? 1 : 0;
-    size_t end = first;
+    size_t end = first, fraction = 0;
     while (end < length && digit(text[end]))
         end++;
-    size_t whole = end - first, used = first;
+    if (end < length && text[end] == '.') {
+        size_t start = ++end;
+        while (end < length && digit(text[end]))
+            end++;
+        fraction = end - start;
+    }
+    size_t coefficient = capacity;
+    uint64_t carry = 0;
+    for (size_t i = end; i > first;) {
+        char ch = text[--i];
+        if (ch == '.')
+            continue;
+        carry += (uint64_t)(ch - '0') * multiplier;
+        buffer[--coefficient] = '0' + carry % 10;
+        carry /= 10;
+    }
+    while (carry != 0) {
+        buffer[--coefficient] = '0' + carry % 10;
+        carry /= 10;
+    }
+    size_t digits = capacity - coefficient, decimals = fraction + places, used = first;
     if (first != 0)
         buffer[0] = text[0];
-    if (whole > places) {
-        memcpy(buffer + used, text + first, whole - places);
-        used += whole - places;
+    size_t whole = digits > decimals ? digits - decimals : 0;
+    if (whole != 0) {
+        memmove(buffer + used, buffer + coefficient, whole);
+        used += whole;
     } else {
         buffer[used++] = '0';
     }
-    buffer[used++] = '.';
-    for (size_t i = whole; i < places; i++)
-        buffer[used++] = '0';
-    size_t tail = whole < places ? whole : places;
-    memcpy(buffer + used, text + end - tail, tail);
-    used += tail;
-    if (end < length && text[end] == '.') {
-        while (++end < length && digit(text[end]))
-            buffer[used++] = text[end];
+    if (decimals != 0) {
+        buffer[used++] = '.';
+        for (size_t i = digits; i < decimals; i++)
+            buffer[used++] = '0';
+        memmove(buffer + used, buffer + coefficient + whole, digits - whole);
+        used += digits - whole;
     }
     css_declaration_token number = {.type = CSS_TOKEN_NUMBER};
     css_error error = intern(buffer, used, &number.text);
     free(buffer);
     if (error == CSS_OK) {
-        error = serialize_numeric(&number, unit, out);
+        error = serialize_numeric(&number, unit, ties_up, out);
         lwc_string_unref(number.text);
     }
     return error;
+}
+
+css_error css__declaration_numeric_divide(
+    const css_declaration_token *token, unsigned int places, const char *unit, lwc_string **out)
+{
+    return numeric_scaled(token, 1, places, unit, false, out);
+}
+
+css_error css__declaration_colour_number(
+    const css_declaration_token *token, unsigned multiplier, unsigned places, lwc_string **out)
+{
+    return numeric_scaled(token, multiplier, places, NULL, true, out);
 }
 
 struct value_format {
@@ -707,7 +746,7 @@ static css_error serialize_angle(const css_declaration *source, lwc_string **out
     if (direction->type != CSS_TOKEN_IDENT) {
         if (behind || (direction->type != CSS_TOKEN_NUMBER && direction->type != CSS_TOKEN_DIMENSION))
             return CSS_INVALID;
-        return serialize_numeric(direction, "deg", out);
+        return serialize_numeric(direction, "deg", false, out);
     }
     if (source->property->id == CSS_DECL_AZIMUTH) {
         static const struct {
@@ -800,7 +839,7 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
             return css__declaration_numeric_divide(token, 3, "s", out);
     }
     if (kind == CSS_DECL_VALUE_TIME || kind == CSS_DECL_VALUE_PAIR_TIME || kind == CSS_DECL_VALUE_FREQUENCY)
-        return serialize_numeric(token, kind == CSS_DECL_VALUE_FREQUENCY ? "hz" : "s", out);
+        return serialize_numeric(token, kind == CSS_DECL_VALUE_FREQUENCY ? "hz" : "s", false, out);
     return css__declaration_numeric_serialize(
         token, kind != CSS_DECL_VALUE_NUMBER && kind != CSS_DECL_VALUE_NUMBER_LENGTH, out);
 }

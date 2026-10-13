@@ -275,6 +275,21 @@ START_TEST(test_aural_values_survive_edits)
 }
 END_TEST
 
+START_TEST(test_lab_values_survive_edits)
+{
+    css_declaration_store *store = create("background:lab(56.2% 0 66.88%);"
+        "border:2px solid oklch(54% 25% -90deg)!important;color:lch(none -1 none / none);opacity:1", _i != 0);
+    ck_assert(set(store, "opacity:.5", _i != 0));
+    check_value(store, "background-color", "lab(56.2 0 83.6)", false);
+    check_value(store, "border-color", "oklch(0.54 0.1 270)", true);
+    check_value(store, "color", "lch(none 0 none / none)", false);
+    ck_assert(set(store, "border-left-color:lab(50 0 0)", _i != 0));
+    check_value(store, "border-left-color", "lab(50 0 0)", false);
+    check_value(store, "border-right-color", "oklch(0.54 0.1 270)", true);
+    css__declaration_store_destroy(store);
+}
+END_TEST
+
 START_TEST(test_native_state_survives_readback_limits)
 {
     css_declaration_store *store = create("margin:var(--m);width:calc(100% - 2px);color:red", false);
@@ -405,6 +420,12 @@ static const struct {
     const char *name, *value, *priority, *expected;
     bool important;
 } inputs[] = {
+    {"color", "LAB(56.2% 0 66.88%)", "", "lab(56.2 0 83.6)"},
+    {"background-color", "OKLAB(54% -25% -5%)", "", "oklab(0.54 -0.1 -0.02)"},
+    {"border-color", "lch(50% 100% -90deg) oklch(none -1 none / none)", "",
+        "lch(50 150 270) oklch(none 0 none / none)"},
+    {"fill", "lab(none none none / none)", "", "lab(none none none / none)"},
+    {"color", "lch(50 20 30px)", "", NULL},
     {"azimuth", "BEHIND LEFT", "important", "220deg", true},
     {"elevation", "-0", "", "0deg"},
     {"pause-before", "123.456789ms", "", "0.123457s"},
@@ -832,6 +853,7 @@ int main(void)
     tcase_add_loop_test(tc, test_removals, 0, REMOVAL_COUNT * 2);
     tcase_add_test(tc, test_shorthand_catalogue);
     tcase_add_loop_test(tc, test_aural_values_survive_edits, 0, 2);
+    tcase_add_loop_test(tc, test_lab_values_survive_edits, 0, 2);
     tcase_add_test(tc, test_native_state_survives_readback_limits);
     tcase_add_test(tc, test_length_and_borrowed_names);
     tcase_add_test(tc, test_repeated_edits_release_sources);

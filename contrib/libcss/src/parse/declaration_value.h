@@ -27,6 +27,11 @@ css_error css__declaration_numeric_serialize(const css_declaration_token *token,
 css_error css__declaration_numeric_divide(
     const css_declaration_token *token, unsigned int places, const char *unit, lwc_string **out);
 
+/* CSS Color numeric component scaled by multiplier / 10^places. Preserve
+ * unbounded decimal precision until final rounding, with ties towards +infinity. */
+css_error css__declaration_colour_number(
+    const css_declaration_token *token, unsigned multiplier, unsigned places, lwc_string **out);
+
 /* Members must be in the requested shorthand's registered component order.
  * NULL members, mixed priorities, mixed CSS-wide keywords or incompatible
  * pending-substitution values give the CSSOM empty string. Reconstruction of

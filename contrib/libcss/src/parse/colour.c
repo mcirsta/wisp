@@ -24,7 +24,7 @@ struct colour_token {
 };
 
 struct colour_value {
-    /* Parsed coordinates remain in their original RGB/HSL/HWB space, alpha
+    /* Parsed coordinates remain in their original color space, alpha
      * 0..1. Convert only at the rendering or legacy RGB serialization boundary. */
     double channels[4];
     unsigned missing;
@@ -153,6 +153,10 @@ enum colour_function {
     COLOUR_RGB,
     COLOUR_HSL,
     COLOUR_HWB,
+    COLOUR_LAB,
+    COLOUR_LCH,
+    COLOUR_OKLAB,
+    COLOUR_OKLCH,
     COLOUR_UNSUPPORTED
 };
 
@@ -164,6 +168,14 @@ static enum colour_function colour_function(lwc_string *name)
         return COLOUR_HSL;
     if (css__keyword_equal(name, "hwb"))
         return COLOUR_HWB;
+    if (css__keyword_equal(name, "lab"))
+        return COLOUR_LAB;
+    if (css__keyword_equal(name, "lch"))
+        return COLOUR_LCH;
+    if (css__keyword_equal(name, "oklab"))
+        return COLOUR_OKLAB;
+    if (css__keyword_equal(name, "oklch"))
+        return COLOUR_OKLCH;
     return COLOUR_UNSUPPORTED;
 }
 
@@ -261,6 +273,114 @@ static bool polar_value(enum colour_function function, const struct colour_token
     return false;
 }
 
+static bool lab_polar(enum colour_function function)
+{
+    return function == COLOUR_LCH || function == COLOUR_OKLCH;
+}
+
+static bool lab_ok(enum colour_function function)
+{
+    return function == COLOUR_OKLAB || function == COLOUR_OKLCH;
+}
+
+/* CSS Color 4 sections 9.3/9.4: modern syntax only. Readback and painting
+ * validate the same coordinates; missing components stay distinct from zero. */
+static bool lab_value(enum colour_function function, const struct colour_token *tokens, size_t count,
+    struct colour_value *out)
+{
+    if (count != 4 && count != 6)
+        return false;
+    if (!character(&tokens[count - 1], ')') || (count == 6 && !character(&tokens[3], '/')))
+        return false;
+    *out = (struct colour_value){{0, 0, 0, 1}, 0};
+    for (size_t i = 0; i < (count == 4 ? 3u : 4u); i++) {
+        const struct colour_token *token = &tokens[i == 3 ? 4 : i];
+        if (token->type == CSS_TOKEN_IDENT && css__keyword_equal(token->text, "none")) {
+            out->missing |= 1u << i;
+            out->channels[i] = 0;
+        } else if (i == 2 && lab_polar(function)) {
+            if (!hue_number(token, &out->channels[i]))
+                return false;
+        } else {
+            if (token->type != CSS_TOKEN_NUMBER && token->type != CSS_TOKEN_PERCENTAGE)
+                return false;
+            bool percentage = token->type == CSS_TOKEN_PERCENTAGE;
+            double reference = i == 3 ? 1 : i == 0 ? (lab_ok(function) ? 1 : 100) :
+                lab_ok(function) ? 0.4 : lab_polar(function) ? 150 : 125;
+            /* Bound rendering math to keep cubic intermediates finite, far
+             * beyond visible colors. CSSOM retains unbounded axes directly
+             * from their source tokens. */
+            double maximum = i == 0 || i == 3 ? (percentage ? 100 : reference) : 1e100;
+            size_t consumed = decimal_number(token->text, maximum, &out->channels[i]);
+            if (consumed == 0 || consumed != lwc_string_length(token->text))
+                return false;
+            if (percentage)
+                out->channels[i] = out->channels[i] / 100 * reference;
+            if (i == 0 || i == 3)
+                out->channels[i] = fmax(0, fmin(reference, out->channels[i]));
+            else if (i == 1 && lab_polar(function))
+                out->channels[i] = fmax(0, out->channels[i]);
+        }
+    }
+    return true;
+}
+
+/* CSS Color 4 conversion equations (css-color-4/#color-conversion-code).
+ * Keep linear RGB separate from the ARGB8
+ * painter's final quantization. General out-of-gamut mapping is still a renderer
+ * limitation; do not copy that clipping into specified-value readback. */
+static double linear_to_srgb(double value)
+{
+    value = fmax(0, fmin(1, value));
+    return value <= 0.0031308 ? 12.92 * value : 1.055 * pow(value, 1 / 2.4) - 0.055;
+}
+
+static void lab_to_rgb(enum colour_function function, struct colour_value *colour)
+{
+    double light = colour->channels[0], a = colour->channels[1], b = colour->channels[2];
+    double maximum = lab_ok(function) ? 1 : 100;
+    if (light <= 0 || light >= maximum) {
+        /* The display-gamut endpoints are black/white regardless of chroma. */
+        colour->channels[0] = colour->channels[1] = colour->channels[2] = light <= 0 ? 0 : 255;
+        return;
+    }
+    if (lab_polar(function)) {
+        double radians = b * (3.14159265358979323846 / 180);
+        b = a * sin(radians);
+        a *= cos(radians);
+    }
+    double red, green, blue;
+    if (lab_ok(function)) {
+        double l = light + 0.3963377774 * a + 0.2158037573 * b;
+        double m = light - 0.1055613458 * a - 0.0638541728 * b;
+        double s = light - 0.0894841775 * a - 1.2914855480 * b;
+        l = l * l * l;
+        m = m * m * m;
+        s = s * s * s;
+        red = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+        green = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+        blue = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+    } else {
+        /* Lab -> XYZ D50 -> Bradford-adapted D65 -> linear sRGB.
+         * The previous adaptation matrix did not preserve a neutral D50 white. */
+        const double epsilon = 216.0 / 24389, kappa = 24389.0 / 27;
+        double fy = (light + 16) / 116, fx = a / 500 + fy, fz = fy - b / 200;
+        double x3 = fx * fx * fx, z3 = fz * fz * fz;
+        double x = (x3 > epsilon ? x3 : (116 * fx - 16) / kappa) * (0.3457 / 0.3585);
+        double y = light > 8 ? fy * fy * fy : light / kappa;
+        double z = (z3 > epsilon ? z3 : (116 * fz - 16) / kappa) * ((1 - 0.3457 - 0.3585) / 0.3585);
+        double x65 = 0.955473421488075 * x - 0.02309845494876471 * y + 0.06325924320057072 * z;
+        double y65 = -0.0283697093338637 * x + 1.0099953980813041 * y + 0.021041441191917323 * z;
+        double z65 = 0.012314014864481998 * x - 0.020507649298898964 * y + 1.330365926242124 * z;
+        red = 3.2409699419045226 * x65 - 1.537383177570094 * y65 - 0.4986107602930034 * z65;
+        green = -0.9692436362808796 * x65 + 1.8759675015077202 * y65 + 0.04155505740717559 * z65;
+        blue = 0.05563007969699366 * x65 - 0.20397695888897652 * y65 + 1.0569715142428786 * z65;
+    }
+    colour->channels[0] = linear_to_srgb(red) * 255;
+    colour->channels[1] = linear_to_srgb(green) * 255;
+    colour->channels[2] = linear_to_srgb(blue) * 255;
+}
+
 static bool function_value(enum colour_function function, const struct colour_token *tokens, size_t count,
     struct colour_value *out)
 {
@@ -268,6 +388,8 @@ static bool function_value(enum colour_function function, const struct colour_to
         return rgb_value(tokens, count, out);
     if (function == COLOUR_HSL || function == COLOUR_HWB)
         return polar_value(function, tokens, count, out);
+    if (function >= COLOUR_LAB && function <= COLOUR_OKLCH)
+        return lab_value(function, tokens, count, out);
     return false;
 }
 
@@ -298,6 +420,8 @@ bool css__parse_colour_function(lwc_string *name, const parserutils_vector *vect
         return false;
     if (function == COLOUR_HSL || function == COLOUR_HWB)
         polar_to_rgb(function, &colour);
+    else if (function >= COLOUR_LAB && function <= COLOUR_OKLCH)
+        lab_to_rgb(function, &colour);
     uint32_t red = channel_byte(colour.channels[0]);
     uint32_t green = channel_byte(colour.channels[1]);
     uint32_t blue = channel_byte(colour.channels[2]);
@@ -387,6 +511,48 @@ static css_error serialize_missing_polar(enum colour_function function, const st
     }
     if (error == CSS_OK)
         error = serialize_modern(function == COLOUR_HSL ? "hsl" : "hwb", parts, out);
+    for (size_t i = 0; i < N_ELEMENTS(parts); i++) {
+        if (parts[i] != NULL)
+            lwc_string_unref(parts[i]);
+    }
+    return error;
+}
+
+/* Lab/LCH readback stays in the original space. Percentage scaling uses exact
+ * decimal arithmetic, including unbounded a/b/chroma values and tiny fractions. */
+static css_error serialize_lab(enum colour_function function, const struct colour_token *tokens,
+    const struct colour_value *colour, lwc_string **out)
+{
+    static const char *const names[] = {"lab", "lch", "oklab", "oklch"};
+    lwc_string *parts[4] = {0};
+    css_error error = CSS_OK;
+    for (size_t i = 0; i < 4; i++) {
+        const struct colour_token *token = &tokens[i == 3 ? 4 : i];
+        if (colour->missing & (1u << i)) {
+            error = lwc_intern_string("none", 4, &parts[i]) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+        } else if (i == 0 || i == 3 || (i == 2 && lab_polar(function))) {
+            char buffer[16];
+            double value = colour->channels[i];
+            if (i == 2 && floor(value * 1000000 + 0.5) == 360000000)
+                value = 0;
+            size_t length = number(buffer, value);
+            if (i == 3 && length == 1 && buffer[0] == '1')
+                continue;
+            error = lwc_intern_string(buffer, length, &parts[i]) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+        } else if (i == 1 && lab_polar(function) && css__number_sign(token->text) < 0) {
+            error = lwc_intern_string("0", 1, &parts[i]) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+        } else {
+            bool percentage = token->type == CSS_TOKEN_PERCENTAGE;
+            unsigned factor = !percentage ? 1 : lab_ok(function) ? 4 : lab_polar(function) ? 150 : 125;
+            unsigned places = !percentage ? 0 : lab_ok(function) ? 3 : 2;
+            css_declaration_token component = {.type = CSS_TOKEN_NUMBER, .text = token->text};
+            error = css__declaration_colour_number(&component, factor, places, &parts[i]);
+        }
+        if (error != CSS_OK)
+            break;
+    }
+    if (error == CSS_OK)
+        error = serialize_modern(names[function - COLOUR_LAB], parts, out);
     for (size_t i = 0; i < N_ELEMENTS(parts); i++) {
         if (parts[i] != NULL)
             lwc_string_unref(parts[i]);
@@ -488,6 +654,8 @@ css_error css__declaration_colour_serialize(const css_declaration_contribution *
         }
         if (!function_value(function, tokens, count, &colour))
             return CSS_INVALID;
+        if (function >= COLOUR_LAB && function <= COLOUR_OKLCH)
+            return serialize_lab(function, tokens, &colour, out);
         if (function == COLOUR_HSL || function == COLOUR_HWB) {
             if (colour.missing != 0)
                 return serialize_missing_polar(function, tokens, &colour, out);

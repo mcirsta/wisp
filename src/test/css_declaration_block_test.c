@@ -54,6 +54,10 @@ static const struct {
         "play-during: url(\"A.ogg\") mix repeat; richness: 25; speak-header: once; speak-numeral: digits; "
         "speak-punctuation: code; speak: none; speech-rate: 120; stress: 50; voice-family: \"One Two\", male; "
         "volume: 200%; cue: none url(\"A.ogg\");"},
+    {"background:linear-gradient(lab(50% 0 0),oklab(50% 0 0)) lch(50% 0 0);"
+     "border:solid oklch(54% 25% -90deg)!important;color:lab(none none none / none)",
+        "background: linear-gradient(lab(50 0 0), oklab(0.5 0 0)) lch(50 0 0); "
+        "border: solid oklch(0.54 0.1 270) !important; color: lab(none none none / none);"},
     {"pause:1000ms;pause-after:2s!important", "pause-before: 1s; pause-after: 2s !important;"},
     {"cue:url(A.ogg);cue-before:none", "cue: none url(\"A.ogg\");"},
     {"cue:var(--Cue);cue-before:none", "cue-after: ; cue-before: none;", true},

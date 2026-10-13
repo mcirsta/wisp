@@ -50,7 +50,7 @@ Already complete: accepted-declaration capture, generated property/alias
 metadata, winning-declaration order, shorthand reconstruction, owned editing,
 whole-value assignments and broad specified-value serialization. The transform
 and Grid batches are committed as `285fee12` and `9fbddb34`; the SVG paint/cursor
-batch is committed as `f7a238d0`. Earlier dated
+batch is committed as `f7a238d0`, and the legacy aural batch as `fdf7b373`. Earlier dated
 sections are historical records, not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
@@ -62,8 +62,9 @@ the target. Each group can require more than one tested batch:
 - [x] Remaining scalar/list families: specified-value readback for the
   already-registered legacy speech properties (2026-10-13). This preserves
   existing declarations without implementing new speech functionality.
-- [ ] Remaining color/font readback gaps, including missing RGB components and
-  the native color families/system-font cases already accepted by parsing.
+- [ ] Remaining color/font readback gaps: Lab/LCH/Oklab/OkLCh are complete
+  (2026-10-13); missing RGB components, out-of-gamut HSL/HWB readback and
+  client-resolved system-font cases remain.
 - [ ] Math values: validate and serialize accepted expressions through shared
   native handling, preserving specified-value semantics. This is the largest
   remaining uncertainty in the native prerequisite work.
@@ -2239,6 +2240,49 @@ Math-valued forms remain explicitly unsupported by readback and belong to the
 existing math checklist group. The next group is the remaining color/font value
 forms, followed by math, aggregate-property identities and the live QuickJS/DOM
 connection. All 185 registrations having a family is not full CSSOM completion.
+
+### Shared Lab/LCH parsing and specified-value readback (2026-10-13)
+
+Committed the legacy aural batch as `fdf7b373`. The four already-supported
+`lab()`, `lch()`, `oklab()` and `oklch()` families now share one allocation-free
+validator with CSSOM readback. The duplicate fixed-point parsers were removed.
+Readback retains the original color space, handles missing components, converts
+percentages to numeric coordinates, normalizes hue and clamps only the components
+whose grammar requires it. This follows
+[CSS Color 4 Lab/LCH syntax](https://drafts.csswg.org/css-color-4/#specifying-lab-lch)
+and [serialization](https://drafts.csswg.org/css-color-4/#serializing-lab-lch).
+
+The regression first reproduced invalid LCH hue acceptance (`30px` and `20%`)
+and unsupported readback. The shared validator now rejects those declarations,
+preserving earlier fallbacks; angle units and unitless angles remain valid.
+It also supports `none`, correct negative-chroma/lightness handling and alpha
+rounding at the final ARGB8 boundary. Fixing the old D50-to-D65 adaptation matrix
+restores neutral Lab grays. Conversion constants were checked against the
+[CSSWG reference equations](https://drafts.csswg.org/css-color-4/#color-conversion-code).
+
+The decimal helper used for transform percentages and millisecond times now
+also performs integer scaling before decimal placement and rounding. Color axes
+therefore keep precision without passing through rendering bytecode or binary
+floating point; color rounding uses ties toward positive infinity. Large accepted
+a/b/chroma values remain intact in readback. Only rendering's cubic arithmetic
+uses a finite safety bound, separate from the stored declaration tokens.
+
+Tests cover whole/chunked parsing, value readback/reparse, cssText, priorities,
+border/background/gradient components, unrelated edits, invalid fallbacks and
+allocation failure/retry. Fifteen new Qt pixel samples cover neutral grays,
+primary colors, alpha, missing values, bounds and malformed hues. All 89 selected
+native suites pass in both Debug and Release, including Debug ASan/UBSan and
+LeakSanitizer. All 15 selected Debug Qt suites and 12 applicable Release Qt
+suites pass; the color fixture now checks 56 samples. Builds are warning-free.
+No GTK builds ran.
+
+This completes the Lab-family part of the existing color/font group, not the
+whole group. Missing RGB components still need real `color(srgb ...)` support;
+out-of-gamut HSL/HWB readback and system-font declaration state remain. Math and
+relative-color syntax stay outside this batch. General display gamut mapping
+remains an existing renderer limitation, recorded in the correctness backlog;
+readback does not turn clipped paint values into authored coordinates. The old
+Duktape style placeholder supplies no color serializer to reuse.
 
 ## Assessment
 
