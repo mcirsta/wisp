@@ -611,6 +611,7 @@ computed = "none"
 parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,CUE_BEFORE_NONE IDENT:) URI:CUE_BEFORE_URI"
 
 [cursor]
+declaration_value = "cursor"
 enum = "CSS_PROP_CURSOR"
 cascade = "manual"
 computed = "auto"
@@ -1725,6 +1726,7 @@ condition = "CSS_ORDER_SET"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) NUMBER:( true:ORDER_SET NUMBER:) CALC:( NUMBER:ORDER_CALC CALC:)'''
 
 [fill]
+declaration_value = "colour"
 enum = "CSS_PROP_FILL"
 cascade = "paint_color"
 computed = "auto"
@@ -1732,11 +1734,12 @@ inherited = true
 opcodes_manual = true
 bits = 2
 initial = "COLOR"
-initial_data = ['0x000000ff']
+initial_data = ['0xff000000']
 values = "color"
 parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,FILL_NONE IDENT:) COLOR:FILL_SET"
 
 [fill_opacity]
+declaration_value = "number"
 enum = "CSS_PROP_FILL_OPACITY"
 cascade = "manual"
 computed = "auto"
@@ -1749,6 +1752,7 @@ values = "fixed"
 condition = "CSS_FILL_OPACITY_SET"
 
 [stroke_opacity]
+declaration_value = "number"
 enum = "CSS_PROP_STROKE_OPACITY"
 cascade = "manual"
 computed = "auto"
@@ -1761,6 +1765,7 @@ values = "fixed"
 condition = "CSS_STROKE_OPACITY_SET"
 
 [stroke]
+declaration_value = "colour"
 enum = "CSS_PROP_STROKE"
 cascade = "paint_color"
 computed = "auto"
@@ -1773,6 +1778,7 @@ values = "color"
 parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,STROKE_NONE IDENT:) COLOR:STROKE_SET"
 
 [stroke_width]
+declaration_value = "number_length"
 enum = "CSS_PROP_STROKE_WIDTH"
 inherited = true
 cascade = "manual"

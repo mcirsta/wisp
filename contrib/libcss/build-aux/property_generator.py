@@ -269,7 +269,7 @@ class TomlPropertyReader:
                     raise ValueError(f"{name}: nested shorthand {member}; list its components")
             value_kind = prop.get('declaration_value', 'none')
             if value_kind not in ('none', 'number', 'length', 'number_length', 'keyword', 'pair_length',
-                                  'quad_length', 'pair_keyword', 'quad_keyword', 'uri', 'image_list', 'keyword_list',
+                                  'quad_length', 'pair_keyword', 'quad_keyword', 'uri', 'cursor', 'image_list', 'keyword_list',
                                   'content', 'string_list', 'counter_list', 'aspect_ratio', 'border_spacing', 'clip',
                                   'font_family', 'flex', 'flex_flow', 'list_style', 'columns', 'border', 'border_side', 'outline',
                                   'colour', 'quad_colour', 'grid_line', 'grid_pair', 'grid_area', 'position', 'position_list',

@@ -6,6 +6,7 @@
  */
 
 #include <check.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -140,6 +141,32 @@ START_TEST(test_horizontal_dashed_line_to_rects)
 }
 END_TEST
 
+START_TEST(test_dash_opacity)
+{
+    const char *opacities[] = {"0", ".5", "1"};
+    const colour colours[] = {0xff0000ff, 0x7f0000ff, 0x000000ff};
+    char source[320];
+    snprintf(source, sizeof(source),
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"100\">"
+        "<line x1=\"10\" y1=\"50\" x2=\"90\" y2=\"50\" stroke=\"red\" "
+        "stroke-width=\"8\" stroke-dasharray=\"10,10\" stroke-opacity=\"%s\"/></svg>", opacities[_i]);
+    struct svgtiny_diagram *diagram = svgtiny_create();
+    ck_assert_ptr_nonnull(diagram);
+    ck_assert_int_eq(svgtiny_parse(diagram, source, strlen(source), "data:", 100, 100), svgtiny_OK);
+    dash_capture_t cap = {0};
+    struct redraw_context ctx = {.plot = &dash_cap_plotters, .priv = &cap};
+    struct rect clip = {0, 0, 100, 100};
+    ck_assert(svg_redraw_diagram(diagram, 0, 0, 100, 100, &clip, &ctx, 0xffffff, 0));
+    ck_assert_int_eq(cap.rect_count, 4);
+    for (int i = 0; i < cap.rect_count; i++) {
+        ck_assert_msg(cap.rect_colours[i] == colours[_i],
+            "opacity %s dash %d: expected 0x%08x, got 0x%08x",
+            opacities[_i], i, colours[_i], cap.rect_colours[i]);
+    }
+    svgtiny_free(diagram);
+}
+END_TEST
+
 /**
  * Test that a vertical dashed line with wide stroke creates rectangles.
  */
@@ -242,6 +269,7 @@ Suite *svg_dash_suite(void)
     tcase_add_test(tc, test_horizontal_dashed_line_to_rects);
     tcase_add_test(tc, test_vertical_dashed_line_to_rects);
     tcase_add_test(tc, test_all_dashed_lines_use_rects);
+    tcase_add_loop_test(tc, test_dash_opacity, 0, 3);
     suite_add_tcase(s, tc);
     return s;
 }

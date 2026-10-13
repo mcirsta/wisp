@@ -693,14 +693,16 @@ START_TEST(test_allocation_failure)
                                "grid-gap:1px 2px;grid-row-gap:3px;grid-gap:var(--Gap);"
                                "GRID-COLUMN-GAP:var(--Column, 4px);--grid-gap:5px;"
                                "grid-template-columns:repeat(32,minmax(0,1fr));grid-template-rows:repeat(2,1px 2em);"
-                               "grid-auto-flow:dense column;";
+                               "grid-auto-flow:dense column;"
+                               "fill:rgb(1 2 3);stroke:none;fill-opacity:.5;stroke-opacity:.25;stroke-width:2;"
+                               "cursor:url(Cursor.cur),url(Other.png),pointer;";
     /* Grow the captured-source buffer after a retained declaration exists. */
     char css[16384];
     size_t pos = (size_t)sprintf(css, "opacity:1; /*");
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 59;
+    const size_t expected = 65;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -859,6 +861,67 @@ static const struct {
     {"border:var(--x)", "border-top", ""},
     {"border:var(--x)", "border", "var(--x)"},
     {"margin:var(--x)!important; margin-left:1px", "margin", "var(--x)"},
+    {"fill:NONE", "fill", "none"},
+    {"fill:CURRENTcolor", "fill", "currentcolor"},
+    {"fill:ReD", "fill", "red"},
+    {"fill:#1234", "fill", "rgba(17, 34, 51, 0.267)"},
+    {"fill:hsl(none 100 50 / 50%)", "fill", "hsl(none 100% 50% / 0.5)"},
+    {"fill:var(--Paint, #ABc)", "fill", "var(--Paint, #ABc)"},
+    {"stroke:NoNe", "stroke", "none"},
+    {"stroke:currentColor", "stroke", "currentcolor"},
+    {"stroke:rgb(1.2 3.4 5.6 / 50%)", "stroke", "rgba(1.2, 3.4, 5.6, 0.5)"},
+    {"stroke:transparent", "stroke", "transparent"},
+    {"stroke:#123!important;stroke:none", "stroke", "rgb(17, 34, 51)"},
+    {"stroke:INITIAL", "stroke", "initial"},
+    {"fill:UNSET", "fill", "unset"},
+    {"stroke:INHERIT", "stroke", "inherit"},
+    {"fill:REVERT", "fill", "revert"},
+    {"fill-opacity:+.123456789", "fill-opacity", "0.123457"},
+    {"fill-opacity:123456789.123456789", "fill-opacity", "123456789.123457"},
+    {"fill-opacity:-.25", "fill-opacity", "-0.25"},
+    {"fill-opacity:2!important;fill-opacity:.5", "fill-opacity", "2"},
+    {"stroke-opacity:1.23456789", "stroke-opacity", "1.234568"},
+    {"stroke-opacity:-0.0000004", "stroke-opacity", "0"},
+    {"stroke-opacity:-1", "stroke-opacity", "-1"},
+    {"stroke-opacity:var(--Alpha)", "stroke-opacity", "var(--Alpha)"},
+    {"fill-opacity:initial", "fill-opacity", "initial"},
+    {"stroke-opacity:inherit", "stroke-opacity", "inherit"},
+    {"stroke-width:+001.23456789", "stroke-width", "1.234568"},
+    {"stroke-width:0", "stroke-width", "0"},
+    {"stroke-width:-0.000000000000", "stroke-width", "0"},
+    {"stroke-width:0PX", "stroke-width", "0px"},
+    {"stroke-width:-0%", "stroke-width", "0%"},
+    {"stroke-width:.123456789EM", "stroke-width", "0.123457em"},
+    {"stroke-width:123456789.123456789%", "stroke-width", "123456789.123457%"},
+    {"stroke-width:2p\\78 !important;stroke-width:3", "stroke-width", "2px"},
+    {"stroke-width:var(--Width, 2PX)", "stroke-width", "var(--Width, 2PX)"},
+    {"stroke-width:INITIAL", "stroke-width", "initial"},
+    {"stroke-width:UNSET", "stroke-width", "unset"},
+    {"cursor:AUTO", "cursor", "auto"},
+    {"cursor:CrOsShAiR", "cursor", "crosshair"},
+    {"cursor:DEFAULT", "cursor", "default"},
+    {"cursor:POINTER", "cursor", "pointer"},
+    {"cursor:MOVE", "cursor", "move"},
+    {"cursor:E-RESIZE", "cursor", "e-resize"},
+    {"cursor:NE-RESIZE", "cursor", "ne-resize"},
+    {"cursor:NW-RESIZE", "cursor", "nw-resize"},
+    {"cursor:N-RESIZE", "cursor", "n-resize"},
+    {"cursor:SE-RESIZE", "cursor", "se-resize"},
+    {"cursor:SW-RESIZE", "cursor", "sw-resize"},
+    {"cursor:S-RESIZE", "cursor", "s-resize"},
+    {"cursor:W-RESIZE", "cursor", "w-resize"},
+    {"cursor:TEXT", "cursor", "text"},
+    {"cursor:WAIT", "cursor", "wait"},
+    {"cursor:HELP", "cursor", "help"},
+    {"cursor:PROGRESS", "cursor", "progress"},
+    {"cursor:URL(Cur.cur), p\\6f inter", "cursor", "url(\"Cur.cur\"), pointer"},
+    {"cursor:url('a b\\22 c\\a d'),url(Other.png),MOVE", "cursor", "url(\"a b\\\"c\\a d\"), url(\"Other.png\"), move"},
+    {"cursor:url(),url(Cur.cur),url(Cur.cur),AUTO", "cursor", "url(\"\"), url(\"Cur.cur\"), url(\"Cur.cur\"), auto"},
+    {"cursor:INHERIT", "cursor", "inherit"},
+    {"cursor:INITIAL", "cursor", "initial"},
+    {"cursor:REVERT", "cursor", "revert"},
+    {"cursor:UNSET", "cursor", "unset"},
+    {"cursor:var(--Cursor, url(Cur.cur), AUTO)", "cursor", "var(--Cursor, url(Cur.cur), AUTO)"},
     {"grid-template-columns:NONE", "grid-template-columns", "none"},
     {"grid-template-rows:INITIAL", "grid-template-rows", "initial"},
     {"grid-template-columns:inherit", "grid-template-columns", "inherit"},
@@ -3417,6 +3480,64 @@ START_TEST(test_gradient_grammar)
 }
 END_TEST
 
+/* SVG 2 stroke-width accepts numbers, lengths and percentages, but no
+ * negative values or unrelated units. Invalid declarations retain the fallback
+ * in ordinary stylesheets as well as CSSOM, including quirks mode. */
+START_TEST(test_stroke_width_grammar)
+{
+    static const char *const invalid[] = {
+        "-1", "-1px", "-1%", "-.00000001", "-.00000001px", "-.00000001%",
+        "1deg", "1turn", "1s", "1hz", "1dpi", "1dppx", "1fr", "1foopx",
+        "0 px", "2 px", "0 fr", "0% px", "1px 2px", "auto", "thin", "none", "initial 1px",
+    };
+    for (unsigned quirks = 0; quirks < 2; quirks++) {
+        css_stylesheet_params configured = params;
+        configured.allow_quirks = quirks != 0;
+        for (size_t i = 0; i < N_ELEMENTS(invalid); i++) {
+            char css[160];
+            snprintf(css, sizeof(css), "stroke-width:7px;stroke-width:%s;color:green", invalid[i]);
+            css_declaration_list *list;
+            ck_assert_int_eq(css__declaration_list_create(&configured, &list), CSS_OK);
+            size_t length = strlen(css);
+            for (size_t offset = 0; offset < length;) {
+                size_t chunk = _i == 0 ? length : 1;
+                check_append(css__declaration_list_append(list, (const uint8_t *)css + offset, chunk));
+                offset += chunk;
+            }
+            ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
+            ck_assert_msg(css__declaration_list_count(list) == 2,
+                "accepted %s, quirks %u, chunks %d", css, quirks, _i);
+            css_declaration_order *order;
+            ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+            lwc_string *value;
+            ck_assert_int_eq(serialize_property(order, "stroke-width", &value), CSS_OK);
+            ck_assert_str_eq(lwc_string_data(value), "7px");
+            lwc_string_unref(value);
+            css__declaration_order_destroy(order);
+            css__declaration_list_destroy(list);
+        }
+        const struct { const char *text; css_fixed value; uint32_t unit; } valid[] = {
+            {"2", INTTOFIX(2), UNIT_PX}, {"0", 0, UNIT_PX}, {"-0", 0, UNIT_PX},
+            {"2px", INTTOFIX(2), UNIT_PX}, {"2%", INTTOFIX(2), UNIT_PCT}, {"2em", INTTOFIX(2), UNIT_EM},
+        };
+        for (size_t i = 0; i < N_ELEMENTS(valid); i++) {
+            char css[64];
+            snprintf(css, sizeof(css), "stroke-width:%s!important", valid[i].text);
+            css_declaration_list *list;
+            ck_assert_int_eq(css__declaration_list_create(&configured, &list), CSS_OK);
+            check_append(css__declaration_list_append(list, (const uint8_t *)css, strlen(css)));
+            ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
+            const css_style *style = inline_style(css__declaration_list_sheet(list));
+            ck_assert_msg(style->used == 3, "rejected %s, quirks %u", css, quirks);
+            ck_assert_uint_eq(style->bytecode[0], buildOPV(CSS_PROP_STROKE_WIDTH, FLAG_IMPORTANT, STROKE_WIDTH_SET));
+            ck_assert_int_eq((css_fixed)style->bytecode[1], valid[i].value);
+            ck_assert_uint_eq(style->bytecode[2], valid[i].unit);
+            css__declaration_list_destroy(list);
+        }
+    }
+}
+END_TEST
+
 /* Grid 2 sections 7.2.1, 7.2.3 and 7.7. Invalid suffixes must reject the
  * entire declaration, and legacy length quirks must not change this grammar. */
 START_TEST(test_grid_value_grammar)
@@ -3579,9 +3700,9 @@ START_TEST(test_transform_bytecode)
 }
 END_TEST
 
-/* !important changes only the OPV, never the counted payload. A trailing
+/* !important changes only the OPV, never the property payload. A trailing
  * declaration checks that traversal resumes at a real property boundary. */
-START_TEST(test_counted_payload_important)
+START_TEST(test_property_payload_important)
 {
     static const char *const values[] = {
         "grid-template-columns:40px 80px", "grid-template-rows:repeat(2,minmax(0,1fr) 20px)",
@@ -3589,6 +3710,11 @@ START_TEST(test_counted_payload_important)
         "grid-template-columns:initial", "grid-template-rows:inherit",
         "transform:translate(1px,2px) scale(2,0) rotate(30deg) translateX(3px) translateY(4px) scaleX(5) scaleY(6)",
         "transform:none", "transform:initial", "transform:revert",
+        "fill:#ff000001", "fill:currentcolor", "fill:none", "fill:initial", "fill:inherit",
+        "stroke:#80008080", "stroke:currentcolor", "stroke:none", "stroke:initial", "stroke:unset",
+        "stroke-width:32768px", "stroke-width:2", "stroke-width:3%", "stroke-width:initial",
+        "fill-opacity:.5", "stroke-opacity:.25",
+        "cursor:auto", "cursor:url(Cur.cur),url(Other.cur),pointer",
     };
     for (size_t i = 0; i < N_ELEMENTS(values); i++) {
         char input[256];
@@ -4192,7 +4318,8 @@ START_TEST(test_value_allocation_failure)
         "flex-flow", "color", "border-color", "list-style", "columns", "border", "border-left", "outline", "column-rule",
         "grid-area", "grid-column", "grid-row", "grid-row-end", "place-content", "background-position", "object-position",
         "background-repeat", "text-decoration", "background", "background-color", "font", "font-size", "line-height",
-        "transform", "transform", "grid-template-columns", "grid-template-rows", "grid-auto-flow"};
+        "transform", "transform", "grid-template-columns", "grid-template-rows", "grid-auto-flow",
+        "fill", "stroke", "fill-opacity", "stroke-opacity", "stroke-width", "cursor"};
     const char *name = names[_i];
     void (*limit)(unsigned) = _i == 37 ? calloc_limit : malloc_limit;
     /* Keep full-border inputs separate: they reset the quad style/colour cases. */
@@ -4213,6 +4340,11 @@ START_TEST(test_value_allocation_failure)
     if (strncmp(name, "grid-template-", 14) == 0 || strcmp(name, "grid-auto-flow") == 0)
         css = "grid-template-columns:repeat(2,minmax(.1234567em,.7654321fr) 12.3456789%);"
               "grid-template-rows:minmax(0,123456789.1234567em) repeat(2,auto);grid-auto-flow:dense column";
+    if (strcmp(name, "fill") == 0 || strncmp(name, "stroke", 6) == 0 || strcmp(name, "fill-opacity") == 0)
+        css = "fill:hsl(none 34.5678912% 56% / .234567);stroke:rgb(1.2 3.4 5.6 / .4);"
+              "fill-opacity:.1234567;stroke-opacity:.7654321;stroke-width:12.3456789em";
+    if (strcmp(name, "cursor") == 0)
+        css = "cursor:url('Cursor.cur'),url('Other.png'),POINTER";
     css_declaration_list *list = parse(css, false);
     css_declaration_order *order;
     ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
@@ -4273,12 +4405,13 @@ int main(void)
     tcase_add_loop_test(tc, test_clip_separators, 0, 2);
     tcase_add_loop_test(tc, test_geometry_invalid_units, 0, 2);
     tcase_add_loop_test(tc, test_gradient_grammar, 0, 2);
+    tcase_add_loop_test(tc, test_stroke_width_grammar, 0, 2);
     tcase_add_loop_test(tc, test_grid_value_grammar, 0, 2);
     tcase_add_loop_test(tc, test_grid_value_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_transform_grammar, 0, 2);
     tcase_add_loop_test(tc, test_transform_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_transform_many_functions, 0, 2);
-    tcase_add_loop_test(tc, test_counted_payload_important, 0, 2);
+    tcase_add_loop_test(tc, test_property_payload_important, 0, 2);
     tcase_add_loop_test(tc, test_geometry_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_flex_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_list_columns_bytecode, 0, 2);
@@ -4309,7 +4442,7 @@ int main(void)
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 41);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 47);
     tcase_add_loop_test(tc, test_position_rollback, 0, 2);
     tcase_add_loop_test(tc, test_font_rollback, 0, 5);
     tcase_add_loop_test(tc, test_gap_rollback, 0, 4);

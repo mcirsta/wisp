@@ -145,8 +145,12 @@ def main(zoom):
             if name == 'clipped-float':
                 expected = (255, 255, 255)
             if name == 'single-background':
-                expected = (213, 153, 110)  # One translucent brown layer over orange.
-            if actual != expected:
+                # One translucent brown layer over orange. Allow one channel
+                # step for 8-bit alpha quantization; a duplicated layer is
+                # much darker (about 191, 144, 98).
+                expected = (213, 153, 111)
+            tolerance = 1 if name == 'single-background' else 0
+            if any(abs(a - e) > tolerance for a, e in zip(actual, expected)):
                 failures.append(f'{name}: pixel {actual}, expected {expected}')
         assert not failures, '\n'.join(failures)
     print(f'Float painting: {len(CASES)} pixel/native click cases passed at {zoom * 100:g}%.')

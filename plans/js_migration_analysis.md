@@ -49,16 +49,18 @@ checklist does not promise that all of that site's JavaScript will work.
 Already complete: accepted-declaration capture, generated property/alias
 metadata, winning-declaration order, shorthand reconstruction, owned editing,
 whole-value assignments and broad specified-value serialization. The transform
-batch is committed as `285fee12`. Earlier dated sections are historical records,
-not additional unchecked requirements.
+and Grid batches are committed as `285fee12` and `9fbddb34`. Earlier dated
+sections are historical records, not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
 the target. Each group can require more than one tested batch:
 
 - [x] Grid track/auto-flow readback and its shared parser corrections (2026-10-13).
-- [ ] Remaining scalar/list families: SVG paint/opacity/stroke, cursor and the
-  already-registered legacy speech properties. These support preserving existing
-  declarations; they do not require implementing new speech functionality.
+- [x] Specified-value readback for the existing SVG paint/opacity/stroke and
+  cursor grammar (2026-10-13); broader SVG rendering remains separate.
+- [ ] Remaining scalar/list families: the already-registered legacy speech
+  properties. These support preserving existing declarations; they do not
+  require implementing new speech functionality.
 - [ ] Remaining color/font readback gaps, including missing RGB components and
   the native color families/system-font cases already accepted by parsing.
 - [ ] Math values: validate and serialize accepted expressions through shared
@@ -78,9 +80,10 @@ the target. Each group can require more than one tested batch:
 The earlier estimate of roughly 8–15 focused batches is a planning estimate,
 not a delivery guarantee. Property-family registrations are a coverage aid,
 not a percentage-complete measure: families can still have unsupported value
-forms. After the Grid batch, 161 of the 185 property registrations have a family;
-24 remain without one. Update this list as groups finish. Keep optional rendering discoveries
-in `src/docs/layout-correctness.md` unless they block correct inline-style edits.
+forms. After the SVG paint/cursor batch, 167 of the 185 property registrations
+have a family; 18 remain without one. Update this list as groups finish. Keep
+optional rendering discoveries in `src/docs/layout-correctness.md` unless they
+block correct inline-style edits.
 The user has authorized worthwhile adjacent root-cause fixes too; distinguish
 those from prerequisites when reporting progress.
 
@@ -2137,6 +2140,60 @@ is clean. No GTK tests ran. The old Duktape style getter was checked again;
 its Modernizr empty-object placeholder has no native declaration implementation
 to reuse. Live `element.style` is still pending, tracked by the finite checklist
 near the start of this document.
+
+### SVG paint/cursor specified values and path opacity (2026-10-13)
+
+The Grid batch is committed as `9fbddb34`. Generated declaration metadata now
+routes `fill`, `stroke`, `fill-opacity`, `stroke-opacity`, `stroke-width` and
+`cursor` through the existing color, numeric and text-list serializers. No new
+persistent value representation or per-page allocation is needed for these
+families. Bare SVG user-unit numbers stay numbers; units, numeric precision,
+URL lists and fallback keywords survive specified-value readback. Opacity is
+clamped when computing the style, not when reading the declared value.
+
+The native stroke-width parser now follows
+[SVG 2 section 13.5.3](https://www.w3.org/TR/SVG2/painting.html#StrokeWidth):
+nonnegative numbers are valid in standards mode, while negative values and
+unrelated units are rejected in both document modes. Sign validation precedes
+fixed-point rounding, so tiny negative values cannot become accepted zeroes.
+The generated initial fill is corrected to opaque black in LibCSS's AARRGGBB
+format, per [SVG 2 section 13.4.1](https://www.w3.org/TR/SVG2/painting.html#FillProperty).
+Both bytecode walkers now skip SVG color and stroke-width payloads correctly;
+`!important` cannot modify those values, and following CSS variables remain visible.
+
+Qt capture exposed a separate path-painting defect: zero opacity meant both
+transparent and unspecified in `plot_style_t`. SVG path opacity now multiplies
+the color's existing alpha at the shared SVG-to-plotter boundary. The ambiguous
+float fields and Qt-specific overrides are removed. Dash rectangles retain that
+alpha, knockout uses the same color representation, and translucent paths are
+painted separately so their overlaps composite correctly. This follows
+[SVG fill/stroke opacity](https://www.w3.org/TR/SVG2/painting.html#FillOpacity)
+and the [SVG rendering model](https://www.w3.org/TR/SVG2/render.html#PaintersModel).
+
+Coverage includes whole/chunked declarations, owned edits, cssText, priorities,
+CSS-wide/deferred values, invalid-assignment preservation, bytecode boundaries
+and allocation-failure recovery. Native plotter tests check zero/half/full
+opacity, multiplication with currentColor alpha, dash conversion and separate
+translucent paint operations. The Qt fixture checks 22 samples in standards and
+quirks modes. The older float-paint-order test now allows one channel step only
+for its translucent sample: alpha quantization must not be mistaken for drawing
+the background twice. Its opaque samples and click expectations remain exact.
+
+Validation: all 89 selected native CSS/QuickJS/font/Grid/transform/SVG suites
+pass in Debug and Release; Debug includes ASan/UBSan and LeakSanitizer. All 128
+Qt suites pass in Debug. Release passes the 117 suites that do not require JS
+diagnostic logs; the other 11 fail their log assertions because Release compiles
+logging out, and are covered by the passing Debug run. Both builds are
+warning-free and `git diff --check` is clean. No GTK tests ran.
+
+This covers existing native syntax, not additional SVG/CSS UI features. SVG CSS
+paint-server/context-paint syntax, opacity percentages/math, cursor hotspots and
+new cursor keywords remain unsupported. Inline-SVG color-alpha/unit transfer,
+text/gradient opacity and older frontend alpha support remain rendering work;
+confirmed examples are in [the correctness backlog](../src/docs/layout-correctness.md#svg-paint-transfer-and-opacity-coverage).
+These do not expand the finite prerequisites for live inline-style editing.
+The old Duktape getter was inspected again: it creates an empty object for a
+Modernizr probe, with no native paint/cursor readback implementation to reuse.
 
 ## Assessment
 

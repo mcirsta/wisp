@@ -1704,6 +1704,48 @@ static void test_counted_payloads(void)
     }
 }
 
+static void test_svg_paint_payloads(void)
+{
+    for (unsigned important = 0; important < 2; important++) {
+        style_case ctx;
+        char css[512];
+        const char *priority = important ? "!important" : "";
+        snprintf(css, sizeof(css), "div { fill:#ff000001%s;stroke:#80008080%s;stroke-width:32768px%s;"
+            "fill-opacity:2;stroke-opacity:-.5;--size:37px;width:var(--size); }", priority, priority, priority);
+        const css_computed_style *style = select_style_from_css(css, &ctx);
+        expect_length_px(css, style, css_computed_width, CSS_WIDTH_SET, 37);
+        css_color color;
+        css_fixed alpha;
+        assert(css_computed_fill(style, &color) == CSS_FILL_COLOR && color == 0x01ff0000);
+        assert(css_computed_stroke(style, &color) == CSS_STROKE_COLOR && color == 0x80800080);
+        expect_length_px(css, style, css_computed_stroke_width, CSS_STROKE_WIDTH_SET, 32768);
+        assert(css_computed_fill_opacity(style, &alpha) == CSS_FILL_OPACITY_SET && alpha == INTTOFIX(1));
+        assert(css_computed_stroke_opacity(style, &alpha) == CSS_STROKE_OPACITY_SET && alpha == 0);
+        destroy_style_case(&ctx);
+    }
+    const char *const forms[] = {"", "fill:initial;stroke:initial", "fill:currentcolor;stroke:currentcolor",
+        "fill:none;stroke:none"};
+    for (unsigned i = 0; i < 4; i++) {
+        style_case ctx;
+        char css[128];
+        snprintf(css, sizeof(css), "div { %s; --size:37px;width:var(--size); }", forms[i]);
+        const css_computed_style *style = select_style_from_css(css, &ctx);
+        expect_length_px(css, style, css_computed_width, CSS_WIDTH_SET, 37);
+        css_color color;
+        if (i < 2) {
+            assert(css_computed_fill(style, &color) == CSS_FILL_COLOR && color == 0xff000000);
+            assert(css_computed_stroke(style, &color) == CSS_STROKE_NONE);
+        } else if (i == 2) {
+            assert(css_computed_fill(style, &color) == CSS_FILL_CURRENT_COLOR);
+            assert(css_computed_stroke(style, &color) == CSS_STROKE_CURRENT_COLOR);
+        } else {
+            assert(css_computed_fill(style, &color) == CSS_FILL_NONE);
+            assert(css_computed_stroke(style, &color) == CSS_STROKE_NONE);
+        }
+        destroy_style_case(&ctx);
+    }
+}
+
 struct selection_counts { unsigned attempts, publications, fail_on_attempt; };
 
 static css_error counted_hints(void *pw, void *node, uint32_t *nhints, css_hint **hints)
@@ -2061,6 +2103,7 @@ int main(int argc, char **argv)
     test_property_handler_integration();
     test_grid_placement_payloads();
     test_counted_payloads();
+    test_svg_paint_payloads();
     test_position_payloads();
     test_repeat_and_decoration_values();
     test_gap_aliases();

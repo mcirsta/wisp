@@ -42,6 +42,19 @@
 
 #include "content/handlers/image/svg.h"
 
+/* Resolve per-paint opacity into the plotter's existing inverted-alpha colour.
+ * Keeping one representation also preserves opacity when strokes become dash
+ * rectangles, and when deciding whether adjacent paths have the same paint. */
+static colour svg_paint_opacity(colour paint, float opacity)
+{
+    if (opacity >= 1.0f)
+        return paint;
+    if (!(opacity > 0.0f))
+        opacity = 0.0f;
+    unsigned int alpha = (unsigned int)((255 - (paint >> 24)) * opacity + 0.5f);
+    return (paint & 0x00ffffff) | ((255 - alpha) << 24);
+}
+
 /**
  * Render a dashed line as a series of filled rectangles.
  *
@@ -794,9 +807,10 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                 pstyle.fill_colour = BGR(fill_c);
             }
 
-            /* Apply SVG fill-opacity and stroke-opacity */
-            pstyle.fill_opacity = diagram->shape[i].fill_opacity_set ? diagram->shape[i].fill_opacity : 1.0f;
-            pstyle.stroke_opacity = diagram->shape[i].stroke_opacity_set ? diagram->shape[i].stroke_opacity : 1.0f;
+            if (diagram->shape[i].fill_opacity_set)
+                pstyle.fill_colour = svg_paint_opacity(pstyle.fill_colour, diagram->shape[i].fill_opacity);
+            if (diagram->shape[i].stroke_opacity_set)
+                pstyle.stroke_colour = svg_paint_opacity(pstyle.stroke_colour, diagram->shape[i].stroke_opacity);
             if (scaled != NULL) {
                 unsigned int j = 0;
                 unsigned int k = 0;
@@ -965,7 +979,11 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                         }
                         continue;
                     }
-                    int same = combo_active && combo_style.stroke_type == pstyle.stroke_type &&
+                    /* Translucent shapes must composite separately where they
+                     * overlap, even when their paint colours are identical. */
+                    bool opaque = (pstyle.fill_type == PLOT_OP_TYPE_NONE || (pstyle.fill_colour >> 24) == 0) &&
+                        (pstyle.stroke_type == PLOT_OP_TYPE_NONE || (pstyle.stroke_colour >> 24) == 0);
+                    int same = opaque && combo_active && combo_style.stroke_type == pstyle.stroke_type &&
                         combo_style.fill_type == pstyle.fill_type &&
                         combo_style.stroke_colour == pstyle.stroke_colour &&
                         combo_style.fill_colour == pstyle.fill_colour &&

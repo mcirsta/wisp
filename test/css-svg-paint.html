@@ -1,0 +1,54 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CSS SVG paint and stroke widths</title>
+<!-- SVG 2 painting: default black, none/currentColor, nonnegative stroke
+     breadths, and number opacity clamped only for computed/rendered output.
+     Root CSS is intentionally outside the SVG so Wisp's computed-style bridge
+     participates. Samples avoid antialiasing and stroke joins. -->
+<style>
+html,body{margin:0;background:white}
+svg{position:absolute;top:10px;width:60px;height:60px}
+#default{left:10px}
+#none{left:80px;fill:none}
+#current{left:150px;color:#024;fill:currentColor}
+#priority{left:220px;fill:#f00!important;--height:60px;height:var(--height)}
+.stroke{fill:none;stroke:#024;stroke-width:8px}
+#number{left:290px;stroke-width:8!important;--height:60px;height:var(--height)}
+#angle{left:360px;stroke-width:40deg}
+#negative{left:430px;stroke-width:-.00000001px}
+#zero-fill{left:500px;fill:#024;fill-opacity:0}
+#zero-stroke{left:570px;stroke-opacity:0}
+#reset{left:10px;top:80px;fill:#f00;fill:initial}
+#fill-upper{left:80px;top:80px;fill:#024;fill-opacity:2}
+#fill-lower{left:150px;top:80px;fill:#024;fill-opacity:-1}
+#stroke-upper{left:220px;top:80px;stroke-opacity:2}
+#stroke-lower{left:290px;top:80px;stroke-opacity:-1}
+#stroke-priority{left:360px;top:80px;stroke:#024!important;stroke-width:8px!important;
+ --height:60px;height:var(--height)}
+#half-fill{left:430px;top:80px;fill:#024;fill-opacity:.5}
+#half-stroke{left:500px;top:80px;stroke-opacity:.5}
+#overlap{left:10px;top:150px;fill:#024;fill-opacity:.5}
+#dash-zero{left:80px;top:150px;stroke-opacity:0}
+#dash-half{left:150px;top:150px;stroke-opacity:.5}
+</style>
+<svg id="default"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="none"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="current"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="priority"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="number" class="stroke"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="angle" class="stroke"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="negative" class="stroke"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="zero-fill"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="zero-stroke" class="stroke"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="reset"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="fill-upper"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="fill-lower"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="stroke-upper" class="stroke"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="stroke-lower" class="stroke"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="stroke-priority" class="stroke"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="half-fill"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="half-stroke" class="stroke"><rect x="10" y="10" width="40" height="40"/></svg>
+<svg id="overlap"><rect x="10" y="10" width="30" height="40"/>
+ <rect x="20" y="10" width="30" height="40"/></svg>
+<svg id="dash-zero" class="stroke"><line x1="10" y1="30" x2="50" y2="30" stroke-dasharray="10,10"/></svg>
+<svg id="dash-half" class="stroke"><line x1="10" y1="30" x2="50" y2="30" stroke-dasharray="10,10"/></svg>

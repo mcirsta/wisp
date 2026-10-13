@@ -18,6 +18,7 @@ typedef struct {
     int path_calls;
     unsigned int max_len;
     unsigned int total_elements;
+    plot_style_t styles[64];
 } capture_t;
 
 static nserror cap_clip(const struct redraw_context *ctx, const struct rect *clip)
@@ -50,9 +51,10 @@ static nserror cap_text(const struct redraw_context *ctx, const struct plot_font
 static nserror cap_path(const struct redraw_context *ctx, const plot_style_t *style, const float *p, unsigned int n,
     const float transform[6])
 {
-    (void)style;
     (void)transform;
     capture_t *cap = (capture_t *)ctx->priv;
+    if (cap->path_calls < 64)
+        cap->styles[cap->path_calls] = *style;
     cap->path_calls++;
     if (n > cap->max_len)
         cap->max_len = n;
@@ -116,11 +118,47 @@ START_TEST(test_svg_extlink_renders_paths)
 }
 END_TEST
 
+/* SVG 2 paint opacity multiplies colour alpha. Separate translucent elements
+ * must retain separate paint operations, including when their styles match. */
+START_TEST(test_svg_path_opacity)
+{
+    const char *opacities[] = {"0", ".5", "1"};
+    unsigned int alphas[] = {0, 128, 255, 0, 64, 128};
+    char source[512];
+    snprintf(source, sizeof(source),
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"100\" "
+        "fill=\"currentColor\" stroke=\"currentColor\" fill-opacity=\"%s\" stroke-opacity=\"%s\">"
+        "<rect x=\"10\" y=\"10\" width=\"50\" height=\"50\"/>"
+        "<rect x=\"20\" y=\"20\" width=\"50\" height=\"50\"/></svg>",
+        opacities[_i % 3], opacities[_i % 3]);
+    struct svgtiny_diagram *diagram = svgtiny_create();
+    ck_assert_ptr_nonnull(diagram);
+    ck_assert_int_eq(svgtiny_parse(diagram, source, strlen(source), "data:", 100, 100), svgtiny_OK);
+
+    capture_t cap = {0};
+    struct redraw_context ctx = {.plot = &cap_plotters, .priv = &cap};
+    struct rect clip = {0, 0, 100, 100};
+    colour current = _i < 3 ? 0x0000ff00 : 0x7f00ff00;
+    ck_assert(svg_redraw_diagram(diagram, 0, 0, 100, 100, &clip, &ctx, 0xffffff, current));
+    int expected_calls = _i == 2 ? 1 : 2;
+    ck_assert_msg(cap.path_calls == expected_calls, "opacity variant %d: expected %d paths, got %d",
+        _i, expected_calls, cap.path_calls);
+    colour expected = ((255 - alphas[_i]) << 24) | 0x00ff00;
+    for (int i = 0; i < cap.path_calls; i++) {
+        ck_assert_msg(cap.styles[i].fill_colour == expected && cap.styles[i].stroke_colour == expected,
+            "opacity variant %d path %d: expected 0x%08x, got fill 0x%08x stroke 0x%08x",
+            _i, i, expected, cap.styles[i].fill_colour, cap.styles[i].stroke_colour);
+    }
+    svgtiny_free(diagram);
+}
+END_TEST
+
 Suite *svg_extlink_suite(void)
 {
     Suite *s = suite_create("renderer_svg_extlink");
     TCase *tc = tcase_create("svg_extlink_rendering");
     tcase_add_test(tc, test_svg_extlink_renders_paths);
+    tcase_add_loop_test(tc, test_svg_path_opacity, 0, 6);
     suite_add_tcase(s, tc);
     return s;
 }

@@ -370,6 +370,22 @@ static const struct {
     const char *name, *value, *priority, *expected;
     bool important;
 } inputs[] = {
+    {"fill", "NONE", "", "none"},
+    {"fill", "#1234", "important", "rgba(17, 34, 51, 0.267)", true},
+    {"stroke", "hsl(120 none 50 / .5)", "", "hsl(120 none 50% / 0.5)"},
+    {"stroke", "CURRENTcolor", "", "currentcolor"},
+    {"fill-opacity", "-1.23456789", "", "-1.234568"},
+    {"stroke-opacity", "+2.3456789", "", "2.345679"},
+    {"stroke-width", "+1.23456789", "important", "1.234568", true},
+    {"stroke-width", "2EM", "", "2em"},
+    {"stroke-width", "-.000000001px", "", NULL},
+    {"stroke-width", "1fr", "", NULL},
+    {"stroke-width", "0 px", "", NULL},
+    {"cursor", "url(Cur.cur),POINTER", "important", "url(\"Cur.cur\"), pointer", true},
+    {"cursor", "url(Cur.cur)", "", NULL},
+    {"cursor", "url(Cur.cur),inherit", "", NULL},
+    {"cursor", "pointer!important", "", NULL},
+
     {"grid-template-columns", "REPEAT(+002,MINMAX(0,1FR) 2PX)", "important",
         "repeat(2, minmax(0px, 1fr) 2px)", true},
     {"grid-template-rows", "minmax(1EM,2%)repeat(1,AUTO)", "", "minmax(1em, 2%) repeat(1, auto)"},

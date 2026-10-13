@@ -2817,6 +2817,8 @@ static void cascade_skip_property(css_style *style, css_code_t opv)
         case CSS_PROP_BORDER_LEFT_COLOR:
         case CSS_PROP_BACKGROUND_COLOR:
         case CSS_PROP_COLUMN_RULE_COLOR:
+        case CSS_PROP_FILL:
+        case CSS_PROP_STROKE:
             if (value == BACKGROUND_COLOR_SET)
                 advance_bytecode(style, sizeof(css_code_t));
             break;
@@ -2976,6 +2978,7 @@ static void cascade_skip_property(css_style *style, css_code_t opv)
         case CSS_PROP_PAUSE_AFTER:
         case CSS_PROP_PAUSE_BEFORE:
         case CSS_PROP_TEXT_INDENT:
+        case CSS_PROP_STROKE_WIDTH:
             if (value == MIN_HEIGHT_SET)
                 advance_bytecode(style, 2 * sizeof(css_code_t));
             break;

@@ -156,6 +156,35 @@ and large scales, and equivalent number/percentage scale spellings in a separate
 rendering batch. The explicit-zero second scale argument is already fixed and
 covered by `test/css-transforms.html`.
 
+## SVG paint transfer and opacity coverage
+
+Confirmed by a Qt capture and source inspection on 2026-10-13 during native
+CSSOM work. The following pre-existing rendering paths still discard data;
+specified-value readback preserves it. These are separate rendering work, not
+new prerequisites for exposing live inline styles.
+
+- External CSS `svg { fill:rgba(255,0,0,0) }` paints a red rectangle. The inline
+  SVG bridge's `css_color_to_hex()` drops the alpha byte. It must transfer color
+  alpha without conflating it with inherited fill/stroke opacity.
+- `svg { stroke-width:1in; fill:none; stroke:black }` leaves a 1px stroke. The
+  bridge drops the computed length unit and treats numeric 1 in every unit as
+  the default 1px. A 40px rectangle at (60,60) in a 160px viewport must have a
+  96px stroke; the sample at (45,80) is white instead of black. Percentage widths
+  likewise need their SVG viewport reference, not conversion to bare numbers.
+- `svg { fill-opacity:0 }` still paints `<text x="10" y="40"
+  font-size="32">MMMM</text>` and a rectangle filled with `url(#gradient)`.
+  The text and native-gradient branches do not apply per-paint opacity. Text's
+  `none`/currentColor handling and frontend text alpha need reviewing together;
+  solid paths and dash rectangles now preserve opacity through their color.
+
+Follow [SVG 2 painting](https://www.w3.org/TR/SVG2/painting.html), including
+color alpha, fill/stroke opacity and stroke-width units. Resolve units at the
+appropriate CSS/SVG boundary, preserve independently inherited values, and test
+solid paths, text, gradients and dash conversion rather than applying a
+whole-image opacity workaround. Older frontends also need an alpha-support
+audit when they are next tested; the obsolete plot-style opacity fields were
+only interpreted by Qt.
+
 ## JavaScript-driven HotNews sidebar (deferred)
 
 The live article sidebar headed "Ultima oră" stays on its loading placeholders.

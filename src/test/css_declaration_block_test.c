@@ -46,6 +46,10 @@ static const struct {
     const char *input, *expected;
     bool pending; /* Partial pending shorthands serialize empty longhands, not round-trippable values. */
 } cases[] = {
+    {"fill:#123;stroke:CURRENTcolor;fill-opacity:2;stroke-opacity:-.25;stroke-width:+2;cursor:url(Cur.cur),POINTER!important",
+        "fill: rgb(17, 34, 51); stroke: currentcolor; fill-opacity: 2; stroke-opacity: -0.25; "
+        "stroke-width: 2; cursor: url(\"Cur.cur\"), pointer !important;"},
+
     {"grid-template-columns:repeat(+02,minmax(0,1FR) 2px);grid-template-rows:NONE;grid-auto-flow:dense column!important",
         "grid-template-columns: repeat(2, minmax(0px, 1fr) 2px); grid-template-rows: none; grid-auto-flow: column dense !important;"},
     {"transform:translateX(1.23456789em) scale(50%,.5) rotate(-0);color:red",
