@@ -46,6 +46,8 @@ static const struct {
     const char *input, *expected;
     bool pending; /* Partial pending shorthands serialize empty longhands, not round-trippable values. */
 } cases[] = {
+    {"grid-template-columns:repeat(+02,minmax(0,1FR) 2px);grid-template-rows:NONE;grid-auto-flow:dense column!important",
+        "grid-template-columns: repeat(2, minmax(0px, 1fr) 2px); grid-template-rows: none; grid-auto-flow: column dense !important;"},
     {"transform:translateX(1.23456789em) scale(50%,.5) rotate(-0);color:red",
         "transform: translateX(1.234568em) scale(0.5) rotate(0deg); color: red;"},
     {"background:linear-gradient(hsl(none 100 50),hwb(120 none 0));border:solid hsl(0 none 50 / none)",
@@ -115,7 +117,7 @@ static const struct {
     {"color:red;width:calc(100% - 2px)", NULL},
     {"margin:1px;background-image:linear-gradient(red,blue)",
         "margin: 1px; background-image: linear-gradient(red, blue);"},
-    {"color:red;grid-template-columns:20px 1fr", NULL},
+    {"color:red;grid-template-columns:20px 1fr", "color: red; grid-template-columns: 20px 1fr;"},
 };
 enum { CASE_COUNT = sizeof(cases) / sizeof(cases[0]) };
 

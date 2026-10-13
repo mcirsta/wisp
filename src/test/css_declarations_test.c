@@ -691,14 +691,16 @@ START_TEST(test_allocation_failure)
                                "background-image:url(\\20 file\\22 ),url('other\\1 image');"
                                "font:normal italic 1.2345em/1.25 One Two,serif; font:initial;"
                                "grid-gap:1px 2px;grid-row-gap:3px;grid-gap:var(--Gap);"
-                               "GRID-COLUMN-GAP:var(--Column, 4px);--grid-gap:5px;";
+                               "GRID-COLUMN-GAP:var(--Column, 4px);--grid-gap:5px;"
+                               "grid-template-columns:repeat(32,minmax(0,1fr));grid-template-rows:repeat(2,1px 2em);"
+                               "grid-auto-flow:dense column;";
     /* Grow the captured-source buffer after a retained declaration exists. */
     char css[16384];
     size_t pos = (size_t)sprintf(css, "opacity:1; /*");
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 56;
+    const size_t expected = 59;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -857,6 +859,40 @@ static const struct {
     {"border:var(--x)", "border-top", ""},
     {"border:var(--x)", "border", "var(--x)"},
     {"margin:var(--x)!important; margin-left:1px", "margin", "var(--x)"},
+    {"grid-template-columns:NONE", "grid-template-columns", "none"},
+    {"grid-template-rows:INITIAL", "grid-template-rows", "initial"},
+    {"grid-template-columns:inherit", "grid-template-columns", "inherit"},
+    {"grid-template-rows:revert", "grid-template-rows", "revert"},
+    {"grid-template-columns:unset", "grid-template-columns", "unset"},
+    {"grid-template-columns:+001.23456789EM 0002FR .5678912% -0", "grid-template-columns",
+        "1.234568em 2fr 0.567891% 0px"},
+    {"grid-template-rows:AUTO min-CONTENT MAX-content 0FR", "grid-template-rows", "auto min-content max-content 0fr"},
+    {"grid-template-columns:MINMAX(0,1FR) minmax(MIN-content,MAX-content)", "grid-template-columns",
+        "minmax(0px, 1fr) minmax(min-content, max-content)"},
+    {"grid-template-rows:minmax(AUTO,20%) minmax(2EM,1PX)", "grid-template-rows", "minmax(auto, 20%) minmax(2em, 1px)"},
+    {"grid-template-columns:REPEAT(+0002,MINMAX(0,1FR) 2PX) 3%", "grid-template-columns",
+        "repeat(2, minmax(0px, 1fr) 2px) 3%"},
+    {"grid-template-rows:repeat(1,auto)repeat(2,0)minmax(0,MAX-CONTENT)", "grid-template-rows",
+        "repeat(1, auto) repeat(2, 0px) minmax(0px, max-content)"},
+    {"grid-template-rows:repeat(32,MINMAX(1PX,2FR))", "grid-template-rows", "repeat(32, minmax(1px, 2fr))"},
+    {"grid-template-columns:repeat(16,1px 2px)", "grid-template-columns", "repeat(16, 1px 2px)"},
+    {"grid-template-rows:1px repeat(31,2em)", "grid-template-rows", "1px repeat(31, 2em)"},
+    {"grid-template-columns:123456789.12345678em .00000049%", "grid-template-columns", "123456789.123457em 0%"},
+    {"grid-template-rows:repeat(2,1px)!important;grid-template-rows:none", "grid-template-rows", "repeat(2, 1px)"},
+    {"grid-template-columns:r\\65 peat(2,m\\69 nmax(0,1f\\72 ))", "grid-template-columns", "repeat(2, minmax(0px, 1fr))"},
+    {"grid-template-rows:var(--Rows, 1PX  2px)", "grid-template-rows", "var(--Rows, 1PX  2px)"},
+    {"grid-auto-flow:ROW", "grid-auto-flow", "row"},
+    {"grid-auto-flow:COLUMN", "grid-auto-flow", "column"},
+    {"grid-auto-flow:DENSE", "grid-auto-flow", "dense"},
+    {"grid-auto-flow:ROW dense", "grid-auto-flow", "dense"},
+    {"grid-auto-flow:DENSE ROW", "grid-auto-flow", "dense"},
+    {"grid-auto-flow:dense/**/CoLuMn", "grid-auto-flow", "column dense"},
+    {"grid-auto-flow:column dense", "grid-auto-flow", "column dense"},
+    {"grid-auto-flow:d\\65 nse c\\6f lumn", "grid-auto-flow", "column dense"},
+    {"grid-auto-flow:column!important;grid-auto-flow:dense", "grid-auto-flow", "column"},
+    {"grid-auto-flow:INITIAL", "grid-auto-flow", "initial"},
+    {"grid-auto-flow:UNSET", "grid-auto-flow", "unset"},
+    {"grid-auto-flow:var(--flow)", "grid-auto-flow", "var(--flow)"},
     {"transform:NONE", "transform", "none"},
     {"transform:INITIAL", "transform", "initial"},
     {"transform:var(--move,  translateX(1px))", "transform", "var(--move,  translateX(1px))"},
@@ -3381,6 +3417,90 @@ START_TEST(test_gradient_grammar)
 }
 END_TEST
 
+/* Grid 2 sections 7.2.1, 7.2.3 and 7.7. Invalid suffixes must reject the
+ * entire declaration, and legacy length quirks must not change this grammar. */
+START_TEST(test_grid_value_grammar)
+{
+    static const char *const tracks[] = {
+        "-1px", "-.00000001px", "-1%", "-1fr", "1deg", "1s", "1hz", "1dpi", "1dppx",
+        "1", ".00000001", "0 px", "minmax(0 em,1fr)", "minmax(1px,0 px)",
+        "minmax(0 1fr)", "minmax(1fr,2fr)", "minmax(1deg,2px)", "minmax(0,1deg)",
+        "minmax(-.00000001px,1fr)", "minmax(0,-1fr)", "minmax(0,1)",
+        "minmax(0,)", "minmax(0,1px,2px)", "minmax(minmax(0,1px),2px)",
+        "repeat(0,1px)", "repeat(-1,1px)", "repeat(1.0,1px)", "repeat(1px,1px)",
+        "repeat(2 1px)", "repeat(2,)", "repeat(2,1px,2px)", "repeat(2,repeat(2,1px))",
+        "1px repeat(2,)", "1px repeat(2,1px,2px)", "1px minmax(0 1fr)",
+        "none 1px", "1px none", "1px initial", "1px !important garbage",
+        /* Existing implementation limit; never accept a truncated value. */
+        "repeat(33,1px)", "1px repeat(32,1px)", "repeat(32,1px) 1px", "repeat(17,1px 2px)",
+        /* Features not implemented by the current track model. */
+        "repeat(auto-fill,1px)", "[start] 1px [end]", "subgrid", "fit-content(10px)",
+    };
+    static const char *const flows[] = {
+        "dense dense", "row row", "column column", "row column", "column row", "dense row column",
+        "dense row dense", "row dense row", "column dense dense", "row initial", "row, dense", "row unknown",
+    };
+    const char *const properties[] = {"grid-template-columns", "grid-template-rows", "grid-auto-flow"};
+    for (unsigned quirks = 0; quirks < 2; quirks++) {
+        css_stylesheet_params configured = params;
+        configured.allow_quirks = quirks != 0;
+        for (size_t p = 0; p < N_ELEMENTS(properties); p++) {
+            const char *const *invalid = p == 2 ? flows : tracks;
+            size_t count = p == 2 ? N_ELEMENTS(flows) : N_ELEMENTS(tracks);
+            const char *fallback = p == 2 ? "column" : "7px 9px";
+            for (size_t i = 0; i < count; i++) {
+                char css[256];
+                snprintf(css, sizeof(css), "%s:%s;%s:%s;color:green", properties[p], fallback, properties[p], invalid[i]);
+                css_declaration_list *list;
+                ck_assert_int_eq(css__declaration_list_create(&configured, &list), CSS_OK);
+                size_t length = strlen(css);
+                for (size_t offset = 0; offset < length;) {
+                    size_t chunk = _i == 0 ? length : 1;
+                    check_append(css__declaration_list_append(list, (const uint8_t *)css + offset, chunk));
+                    offset += chunk;
+                }
+                ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
+                ck_assert_msg(css__declaration_list_count(list) == 2,
+                    "accepted %s, quirks %u, chunks %d", css, quirks, _i);
+                css_declaration_order *order;
+                ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+                lwc_string *value;
+                ck_assert_int_eq(serialize_property(order, properties[p], &value), CSS_OK);
+                ck_assert_str_eq(lwc_string_data(value), fallback);
+                lwc_string_unref(value);
+                css__declaration_order_destroy(order);
+                css__declaration_list_destroy(list);
+            }
+        }
+    }
+}
+END_TEST
+
+START_TEST(test_grid_value_bytecode)
+{
+    static const char *const forms[][3] = {
+        {"grid-template-columns", "repeat(2,10px minmax(0,1fr))", "10px minmax(0px,1fr) 10px minmax(0px,1fr)"},
+        {"grid-template-rows", "repeat(2,10px minmax(0,1fr))", "10px minmax(0px,1fr) 10px minmax(0px,1fr)"},
+        {"grid-template-columns", "repeat(1,auto min-content max-content)", "auto min-content max-content"},
+        {"grid-template-rows", "repeat(1,0 -0px -0%)", "0px 0px 0%"},
+        {"grid-auto-flow", "dense row", "row dense"},
+        {"grid-auto-flow", "dense", "row dense"},
+        {"grid-auto-flow", "dense column", "column dense"},
+    };
+    for (size_t i = 0; i < N_ELEMENTS(forms); i++) {
+        char first[160], second[160];
+        snprintf(first, sizeof(first), "%s:%s", forms[i][0], forms[i][1]);
+        snprintf(second, sizeof(second), "%s:%s", forms[i][0], forms[i][2]);
+        css_declaration_list *a = parse(first, _i != 0), *b = parse(second, _i != 0);
+        ck_assert_msg(css__declaration_list_count(a) == 1 && css__declaration_list_count(b) == 1,
+            "failed %s / %s", first, second);
+        compare_sheets(css__declaration_list_sheet(a), css__declaration_list_sheet(b));
+        css__declaration_list_destroy(a);
+        css__declaration_list_destroy(b);
+    }
+}
+END_TEST
+
 /* Invalid transform arguments must never replace an earlier valid value,
  * including in quirks mode. CSS Transforms does not opt into unitless lengths. */
 START_TEST(test_transform_grammar)
@@ -3455,6 +3575,36 @@ START_TEST(test_transform_bytecode)
         compare_sheets(css__declaration_list_sheet(a), css__declaration_list_sheet(b));
         css__declaration_list_destroy(a);
         css__declaration_list_destroy(b);
+    }
+}
+END_TEST
+
+/* !important changes only the OPV, never the counted payload. A trailing
+ * declaration checks that traversal resumes at a real property boundary. */
+START_TEST(test_counted_payload_important)
+{
+    static const char *const values[] = {
+        "grid-template-columns:40px 80px", "grid-template-rows:repeat(2,minmax(0,1fr) 20px)",
+        "grid-template-columns:repeat(32,minmax(1px,2fr))", "grid-template-rows:none",
+        "grid-template-columns:initial", "grid-template-rows:inherit",
+        "transform:translate(1px,2px) scale(2,0) rotate(30deg) translateX(3px) translateY(4px) scaleX(5) scaleY(6)",
+        "transform:none", "transform:initial", "transform:revert",
+    };
+    for (size_t i = 0; i < N_ELEMENTS(values); i++) {
+        char input[256];
+        snprintf(input, sizeof(input), "%s;color:red", values[i]);
+        css_declaration_list *normal = parse(input, _i != 0);
+        snprintf(input, sizeof(input), "%s!important;color:red", values[i]);
+        css_declaration_list *priority = parse(input, _i != 0);
+        const css_style *a = inline_style(css__declaration_list_sheet(normal));
+        const css_style *b = inline_style(css__declaration_list_sheet(priority));
+        ck_assert_msg(a->used > 2 && a->used == b->used, "wrong bytecode size: %s", values[i]);
+        ck_assert_msg(b->bytecode[0] == (a->bytecode[0] | ((css_code_t)FLAG_IMPORTANT << 10)),
+            "wrong OPV: %s", values[i]);
+        ck_assert_msg(memcmp(a->bytecode + 1, b->bytecode + 1, (a->used - 1) * sizeof(css_code_t)) == 0,
+            "!important corrupted payload or next declaration: %s", values[i]);
+        css__declaration_list_destroy(normal);
+        css__declaration_list_destroy(priority);
     }
 }
 END_TEST
@@ -4042,7 +4192,7 @@ START_TEST(test_value_allocation_failure)
         "flex-flow", "color", "border-color", "list-style", "columns", "border", "border-left", "outline", "column-rule",
         "grid-area", "grid-column", "grid-row", "grid-row-end", "place-content", "background-position", "object-position",
         "background-repeat", "text-decoration", "background", "background-color", "font", "font-size", "line-height",
-        "transform", "transform"};
+        "transform", "transform", "grid-template-columns", "grid-template-rows", "grid-auto-flow"};
     const char *name = names[_i];
     void (*limit)(unsigned) = _i == 37 ? calloc_limit : malloc_limit;
     /* Keep full-border inputs separate: they reset the quad style/colour cases. */
@@ -4060,6 +4210,9 @@ START_TEST(test_value_allocation_failure)
               "rgb(1.2 3.4 5.6 / .4)";
     if (strcmp(name, "font") == 0 || strcmp(name, "font-size") == 0 || strcmp(name, "line-height") == 0)
         css = "font:italic small-caps bold 1.2345678em / 1.3456789 One Two,serif";
+    if (strncmp(name, "grid-template-", 14) == 0 || strcmp(name, "grid-auto-flow") == 0)
+        css = "grid-template-columns:repeat(2,minmax(.1234567em,.7654321fr) 12.3456789%);"
+              "grid-template-rows:minmax(0,123456789.1234567em) repeat(2,auto);grid-auto-flow:dense column";
     css_declaration_list *list = parse(css, false);
     css_declaration_order *order;
     ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
@@ -4120,9 +4273,12 @@ int main(void)
     tcase_add_loop_test(tc, test_clip_separators, 0, 2);
     tcase_add_loop_test(tc, test_geometry_invalid_units, 0, 2);
     tcase_add_loop_test(tc, test_gradient_grammar, 0, 2);
+    tcase_add_loop_test(tc, test_grid_value_grammar, 0, 2);
+    tcase_add_loop_test(tc, test_grid_value_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_transform_grammar, 0, 2);
     tcase_add_loop_test(tc, test_transform_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_transform_many_functions, 0, 2);
+    tcase_add_loop_test(tc, test_counted_payload_important, 0, 2);
     tcase_add_loop_test(tc, test_geometry_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_flex_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_list_columns_bytecode, 0, 2);
@@ -4153,7 +4309,7 @@ int main(void)
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 38);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 41);
     tcase_add_loop_test(tc, test_position_rollback, 0, 2);
     tcase_add_loop_test(tc, test_font_rollback, 0, 5);
     tcase_add_loop_test(tc, test_gap_rollback, 0, 4);

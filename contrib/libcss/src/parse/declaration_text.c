@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "parse/declaration_text.h"
+#include "parse/declaration_value.h"
 #include "parse/property.h"
 #include "parse/repeat.h"
 #include "utils/css_utils.h"
@@ -421,6 +422,77 @@ static css_error serialize_list(const css_declaration *source, struct text_outpu
     return need_value ? CSS_INVALID : CSS_OK;
 }
 
+/* These are accepted track-list tokens, not computed tracks: retain repeat()
+ * and specified units instead of expanding/fixing them from layout bytecode.
+ * The parser owns grammar validation; this walk only formats its supported
+ * components. In particular, a repeat count is a number, while bare zero in
+ * a track breadth is a length. */
+static css_error serialize_grid_tracks(const css_declaration *source, struct text_output *out)
+{
+    bool after_value = false, repeat_count = false;
+    for (size_t i = 0; i < source->token_count; i++) {
+        const css_declaration_token *token = &source->tokens[i];
+        if (token->type == CSS_TOKEN_S)
+            continue;
+        css_error error;
+        if (character(token, ',')) {
+            error = append(out, ", ", 2, false);
+            after_value = false;
+        } else if (character(token, ')')) {
+            error = append(out, ")", 1, false);
+            after_value = true;
+        } else {
+            error = after_value ? append(out, " ", 1, false) : CSS_OK;
+            if (error != CSS_OK)
+                return error;
+            if (token->type == CSS_TOKEN_FUNCTION) {
+                repeat_count = css__keyword_equal(token->text, "repeat");
+                if (!repeat_count && !css__keyword_equal(token->text, "minmax"))
+                    return CSS_INVALID;
+                error = append(out, lwc_string_data(token->text), lwc_string_length(token->text), true);
+                if (error == CSS_OK)
+                    error = append(out, "(", 1, false);
+                after_value = false;
+            } else if (token->type == CSS_TOKEN_IDENT) {
+                error = append(out, lwc_string_data(token->text), lwc_string_length(token->text), true);
+                after_value = true;
+            } else if (token->type == CSS_TOKEN_NUMBER || token->type == CSS_TOKEN_DIMENSION ||
+                token->type == CSS_TOKEN_PERCENTAGE) {
+                lwc_string *number;
+                error = css__declaration_numeric_serialize(token, !repeat_count, &number);
+                if (error == CSS_OK) {
+                    error = append(out, lwc_string_data(number), lwc_string_length(number), false);
+                    lwc_string_unref(number);
+                }
+                repeat_count = false;
+                after_value = true;
+            } else {
+                return CSS_INVALID;
+            }
+        }
+        if (error != CSS_OK)
+            return error;
+    }
+    return after_value ? CSS_OK : CSS_INVALID;
+}
+
+static css_error serialize_grid_flow(const css_declaration *source, struct text_output *out)
+{
+    bool column = false, dense = false;
+    for (size_t i = 0; i < source->token_count; i++) {
+        const css_declaration_token *token = &source->tokens[i];
+        if (token->type == CSS_TOKEN_S)
+            continue;
+        if (token->type != CSS_TOKEN_IDENT)
+            return CSS_INVALID;
+        column |= css__keyword_equal(token->text, "column");
+        dense |= css__keyword_equal(token->text, "dense");
+    }
+    /* CSSOM canonical order and omission: dense implies row. */
+    const char *value = column ? (dense ? "column dense" : "column") : (dense ? "dense" : "row");
+    return append(out, value, strlen(value), false);
+}
+
 static css_error serialize(const css_declaration *source, struct text_output *out)
 {
     switch (source->property->value_kind) {
@@ -435,6 +507,10 @@ static css_error serialize(const css_declaration *source, struct text_output *ou
         return serialize_repeats(source, out);
     case CSS_DECL_VALUE_TEXT_DECORATION:
         return serialize_decoration(source, out);
+    case CSS_DECL_VALUE_GRID_TRACKS:
+        return serialize_grid_tracks(source, out);
+    case CSS_DECL_VALUE_GRID_FLOW:
+        return serialize_grid_flow(source, out);
     default:
         return serialize_list(source, out);
     }

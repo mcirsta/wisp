@@ -84,7 +84,10 @@ void css__make_style_important(css_style *style)
         offset++;
 
         /* Advance past any property-specific data */
-        if (css__is_background_list(opv)) {
+        uint32_t counted = css__counted_payload_words(opv, bytecode + offset);
+        if (counted != 0) {
+            offset += counted;
+        } else if (css__is_background_list(opv)) {
             offset += 1 + bytecode[offset];
         } else if (css__grid_line_has_integer(opv)) {
             offset++;

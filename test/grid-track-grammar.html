@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8"><title>Grid track and flow grammar</title>
+<!-- CSS Grid 2 sections 7.2.1, 7.2.3 and 7.7. Geometry follows explicit
+     track lengths; no font measurements or Chromium reference is involved. -->
+<style>
+body{margin:20px}.case{display:flow-root;width:240px;margin-bottom:20px}
+.grid{display:grid;width:120px;height:60px;grid-template-columns:40px 80px;
+ grid-template-rows:20px 40px;align-content:start;justify-content:start;background:#eee}
+.item{grid-area:2 / 2;background:#58a}.flow .item{grid-area:auto}
+#switch{position:absolute;left:300px;top:0}
+#switch:checked ~ .case .grid{grid-template-columns:50px 70px!important;grid-template-rows:25px 35px!important;grid-auto-flow:column!important}
+</style><input id="switch" type="checkbox" aria-label="Change grid tracks and flow">
+<div class="case" id="column-minmax-case"><div class="grid" id="column-minmax-grid" style="grid-template-columns:minmax(40px,40px) 80px"><div class="item" id="column-minmax-item"></div></div></div>
+<div class="case" id="row-minmax-case"><div class="grid" id="row-minmax-grid" style="grid-template-rows:minmax(20px,20px) 40px"><div class="item" id="row-minmax-item"></div></div></div>
+<div class="case" id="column-repeat-case"><div class="grid" id="column-repeat-grid" style="grid-template-columns:repeat(2,30px 30px)"><div class="item" id="column-repeat-item"></div></div></div>
+<div class="case" id="row-repeat-case"><div class="grid" id="row-repeat-grid" style="grid-template-rows:repeat(2,10px 20px)"><div class="item" id="row-repeat-item"></div></div></div>
+<div class="case" id="repeat-minmax-case"><div class="grid" id="repeat-minmax-grid" style="grid-template-columns:repeat(2,minmax(30px,30px) 30px);--height:60px;height:var(--height)"><div class="item" id="repeat-minmax-item"></div></div></div>
+<div class="case" id="minmax-flex-case"><div class="grid" id="minmax-flex-grid" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr)"><div class="item" id="minmax-flex-item"></div></div></div>
+<div class="case" id="missing-comma-case"><div class="grid" id="missing-comma-grid" style="grid-template-columns:minmax(0 1fr) 1fr"><div class="item" id="missing-comma-item"></div></div></div>
+<div class="case" id="flex-minimum-case"><div class="grid" id="flex-minimum-grid" style="grid-template-columns:minmax(1fr,2fr) 1fr"><div class="item" id="flex-minimum-item"></div></div></div>
+<div class="case" id="negative-minimum-case"><div class="grid" id="negative-minimum-grid" style="grid-template-rows:minmax(-.00000001px,10px) 20px"><div class="item" id="negative-minimum-item"></div></div></div>
+<div class="case" id="invalid-angle-case"><div class="grid" id="invalid-angle-grid" style="grid-template-columns:10deg 20px"><div class="item" id="invalid-angle-item"></div></div></div>
+<div class="case" id="invalid-maximum-case"><div class="grid" id="invalid-maximum-grid" style="grid-template-rows:minmax(0,10deg) 20px"><div class="item" id="invalid-maximum-item"></div></div></div>
+<div class="case" id="malformed-repeat-case"><div class="grid" id="malformed-repeat-grid" style="grid-template-columns:10px repeat(2,)"><div class="item" id="malformed-repeat-item"></div></div></div>
+<div class="case" id="no-truncation-case"><div class="grid" id="no-truncation-grid" style="grid-template-columns:10px repeat(32,1px)"><div class="item" id="no-truncation-item"></div></div></div>
+<div class="case" id="dense-column-case"><div class="grid flow" id="dense-column-grid" style="grid-auto-flow:dense column"><div></div><div class="item" id="dense-column-item"></div><div></div></div></div>
+<div class="case" id="column-dense-case"><div class="grid flow" id="column-dense-grid" style="grid-auto-flow:column dense"><div></div><div class="item" id="column-dense-item"></div><div></div></div></div>
+<div class="case" id="dense-row-case"><div class="grid flow" id="dense-row-grid" style="grid-auto-flow:dense row"><div></div><div class="item" id="dense-row-item"></div><div></div></div></div>
+<div class="case" id="duplicate-dense-case"><div class="grid flow" id="duplicate-dense-grid" style="grid-auto-flow:column;grid-auto-flow:dense dense"><div></div><div class="item" id="duplicate-dense-item"></div><div></div></div></div>

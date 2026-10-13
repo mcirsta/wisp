@@ -1662,6 +1662,48 @@ static void test_grid_placement_payloads(void)
     }
 }
 
+/* Ordinary counted payloads must be skipped intact while collecting custom
+ * properties, including when their values are independently important. */
+static void test_counted_payloads(void)
+{
+    const char *const properties[] = {"grid-template-columns", "grid-template-rows"};
+    for (size_t p = 0; p < 2; p++) {
+        for (unsigned important = 0; important < 2; important++) {
+            style_case ctx;
+            char css[512];
+            snprintf(css, sizeof(css), "div { %s:repeat(2,minmax(32768px,1fr) 20px)%s;"
+                "--size:37px; width:var(--size); }", properties[p], important ? "!important" : "");
+            const css_computed_style *style = select_style_from_css(css, &ctx);
+            expect_length_px(css, style, css_computed_width, CSS_WIDTH_SET, 37);
+            int32_t count;
+            css_computed_grid_track *tracks;
+            uint8_t type = p == 0 ? css_computed_grid_template_columns(style, &count, &tracks) :
+                css_computed_grid_template_rows(style, &count, &tracks);
+            assert(type == CSS_GRID_TEMPLATE_SET && count == 4 && tracks != NULL);
+            for (int i = 0; i < count; i++) {
+                if (i % 2 == 0) {
+                    assert(tracks[i].unit == CSS_UNIT_MINMAX && tracks[i].value == INTTOFIX(32768));
+                    assert(tracks[i].min_unit == CSS_UNIT_PX && tracks[i].max_unit == CSS_UNIT_FR);
+                    assert(tracks[i].max_value == INTTOFIX(1));
+                } else {
+                    assert(tracks[i].unit == CSS_UNIT_PX && tracks[i].value == INTTOFIX(20));
+                }
+            }
+            destroy_style_case(&ctx);
+        }
+    }
+    for (unsigned important = 0; important < 2; important++) {
+        style_case ctx;
+        char css[512];
+        snprintf(css, sizeof(css), "div { transform:translate(1px,2px) scale(2,0) rotate(30deg) "
+            "translateX(3px) translateY(4px) scaleX(5) scaleY(6)%s; --size:37px; width:var(--size); }",
+            important ? "!important" : "");
+        const css_computed_style *style = select_style_from_css(css, &ctx);
+        expect_length_px(css, style, css_computed_width, CSS_WIDTH_SET, 37);
+        destroy_style_case(&ctx);
+    }
+}
+
 struct selection_counts { unsigned attempts, publications, fail_on_attempt; };
 
 static css_error counted_hints(void *pw, void *node, uint32_t *nhints, css_hint **hints)
@@ -2018,6 +2060,7 @@ int main(int argc, char **argv)
     test_deferred_important();
     test_property_handler_integration();
     test_grid_placement_payloads();
+    test_counted_payloads();
     test_position_payloads();
     test_repeat_and_decoration_values();
     test_gap_aliases();

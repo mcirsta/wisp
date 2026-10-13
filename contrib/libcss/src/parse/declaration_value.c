@@ -661,6 +661,7 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
     if (kind == CSS_DECL_VALUE_BACKGROUND)
         return css__declaration_background_component(value, out);
     if (kind == CSS_DECL_VALUE_URI || kind == CSS_DECL_VALUE_KEYWORD_LIST ||
+        kind == CSS_DECL_VALUE_GRID_TRACKS || kind == CSS_DECL_VALUE_GRID_FLOW ||
         kind == CSS_DECL_VALUE_CONTENT || kind == CSS_DECL_VALUE_STRING_LIST || kind == CSS_DECL_VALUE_COUNTER_LIST ||
         kind == CSS_DECL_VALUE_FONT_FAMILY || kind == CSS_DECL_VALUE_REPEAT_LIST || kind == CSS_DECL_VALUE_TEXT_DECORATION)
         return css__declaration_text_serialize(source, out);

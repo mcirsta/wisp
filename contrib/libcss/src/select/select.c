@@ -2794,7 +2794,10 @@ static void cascade_skip_property(css_style *style, css_code_t opv)
     opcode_t op = getOpcode(opv);
     uint32_t value = getValue(opv);
 
-    if (css__is_background_list(opv)) {
+    uint32_t counted = css__counted_payload_words(opv, style->bytecode);
+    if (counted != 0) {
+        advance_bytecode(style, counted * sizeof(css_code_t));
+    } else if (css__is_background_list(opv)) {
         advance_bytecode(style, (1 + *style->bytecode) * sizeof(css_code_t));
     } else if (css__grid_line_has_integer(opv)) {
         advance_bytecode(style, sizeof(css_code_t));

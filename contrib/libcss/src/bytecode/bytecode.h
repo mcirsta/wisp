@@ -177,4 +177,27 @@ static inline bool css__grid_line_has_integer(css_code_t opv)
             op == CSS_PROP_GRID_COLUMN_START || op == CSS_PROP_GRID_COLUMN_END);
 }
 
+/* Counted Grid/transform payloads have variable-sized entries. Both the
+ * importance marker and the variable-collection pass must skip their complete
+ * payload, never reinterpret a count, length or unit as a property OPV.
+ * Like their cascade readers, this operates on validated parser bytecode. */
+static inline uint32_t css__counted_payload_words(css_code_t opv, const css_code_t *payload)
+{
+    if (hasFlagValue(opv))
+        return 0;
+    opcode_t op = getOpcode(opv);
+    uint32_t offset = 1;
+    if ((op == CSS_PROP_GRID_TEMPLATE_COLUMNS || op == CSS_PROP_GRID_TEMPLATE_ROWS) &&
+        getValue(opv) == GRID_TEMPLATE_SET) {
+        for (uint32_t i = 0; i < payload[0]; i++)
+            offset += payload[offset + 1] == UNIT_MINMAX ? 6 : 2;
+    } else if (op == CSS_PROP_TRANSFORM && getValue(opv) != TRANSFORM_NONE) {
+        for (uint32_t i = 0; i < payload[0]; i++)
+            offset += payload[offset] == TRANSFORM_TRANSLATE || payload[offset] == TRANSFORM_SCALE ? 5 : 3;
+    } else {
+        return 0;
+    }
+    return offset;
+}
+
 #endif

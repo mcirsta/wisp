@@ -242,8 +242,7 @@ add_library(css ${WISP_LIB_TYPE}
 	src/parse/properties/text_decoration.c
 	src/parse/properties/utils.c
 	src/parse/properties/voice_family.c
-	src/parse/properties/grid_template_columns.c
-	src/parse/properties/grid_template_rows.c
+	src/parse/properties/grid_template.c
 	src/parse/properties/grid_placement.c
 	src/parse/properties/grid_auto_flow.c
 	src/parse/properties/transform.c

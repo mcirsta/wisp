@@ -1785,11 +1785,12 @@ values = [["length", "", "calc"]]
 condition = "CSS_STROKE_WIDTH_SET"
 
 [grid_template_columns]
+declaration_value = "grid_tracks"
 enum = "CSS_PROP_GRID_TEMPLATE_COLUMNS"
 inherited = false
 cascade = "manual"
 computed = "manual"
-wrap = "css__parse_grid_template_columns_internal"
+wrap = "css__parse_grid_template_internal"
 bits = 2
 initial = "GRID_TEMPLATE_NONE"
 initial_data = ['NULL']
@@ -1797,14 +1798,15 @@ values = "grid_track_arr"
 defaults = "CSS_GRID_TEMPLATE_NONE"
 outer_struct = true
 select_comments = "Encode grid tracks as an array of track items, terminated with a zero-value entry."
-parse = "WRAP:css__parse_grid_template_columns_internal"
+parse = "WRAP:css__parse_grid_template_internal"
 
 [grid_template_rows]
+declaration_value = "grid_tracks"
 enum = "CSS_PROP_GRID_TEMPLATE_ROWS"
 inherited = false
 cascade = "manual"
 computed = "manual"
-wrap = "css__parse_grid_template_rows_internal"
+wrap = "css__parse_grid_template_internal"
 bits = 2
 initial = "GRID_TEMPLATE_NONE"
 initial_data = ['NULL']
@@ -1812,9 +1814,10 @@ values = "grid_track_arr"
 defaults = "CSS_GRID_TEMPLATE_NONE"
 outer_struct = true
 select_comments = "Encode grid tracks as an array of track items, terminated with a zero-value entry."
-parse = "WRAP:css__parse_grid_template_rows_internal"
+parse = "WRAP:css__parse_grid_template_internal"
 
 [grid_auto_flow]
+declaration_value = "grid_flow"
 enum = "CSS_PROP_GRID_AUTO_FLOW"
 inherited = false
 cascade = "ident"

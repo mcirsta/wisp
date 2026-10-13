@@ -38,6 +38,52 @@ Keep execution limits, callback lifetime safety and JS-attributed mutation logs.
 This priority overrides the earlier batch ordering below. It does not imply all
 scripts or application APIs need to be supported before a page can be useful.
 
+### Finite checklist to live inline styles (2026-10-13)
+
+The immediate target is a real, stable `element.style` object that survives DOM
+lifetime changes, preserves unrelated declarations when edited, updates rendering
+and logs JS-originated mutations. Then rerun the saved eBihoreanul bundle past
+its `style.opacity` probe and report its next actual blocker. Completing this
+checklist does not promise that all of that site's JavaScript will work.
+
+Already complete: accepted-declaration capture, generated property/alias
+metadata, winning-declaration order, shorthand reconstruction, owned editing,
+whole-value assignments and broad specified-value serialization. The transform
+batch is committed as `285fee12`. Earlier dated sections are historical records,
+not additional unchecked requirements.
+
+The remaining work is grouped here so adjacent discoveries do not silently move
+the target. Each group can require more than one tested batch:
+
+- [x] Grid track/auto-flow readback and its shared parser corrections (2026-10-13).
+- [ ] Remaining scalar/list families: SVG paint/opacity/stroke, cursor and the
+  already-registered legacy speech properties. These support preserving existing
+  declarations; they do not require implementing new speech functionality.
+- [ ] Remaining color/font readback gaps, including missing RGB components and
+  the native color families/system-font cases already accepted by parsing.
+- [ ] Math values: validate and serialize accepted expressions through shared
+  native handling, preserving specified-value semantics. This is the largest
+  remaining uncertainty in the native prerequisite work.
+- [ ] Modern aggregate property identities/decomposition and preservation:
+  finish the older aggregate models (`font-variant`, background position/repeat
+  axes, text decoration, white space and logical start/end identities), then
+  verify that editing one property cannot discard another accepted value.
+- [ ] QuickJS `CSSStyleProperties`: stable per-element object, generated property
+  accessors, standard methods, enumeration and CSSOM exception/conversion rules.
+- [ ] DOM synchronization: style-attribute edits in both directions, coalesced
+  render invalidation, JS mutation attribution and no-op handling.
+- [ ] Integration/lifetime checks: detached trees, adoption, GC, navigation,
+  reentrancy and failures; saved-page regression and a fresh live-target check.
+
+The earlier estimate of roughly 8–15 focused batches is a planning estimate,
+not a delivery guarantee. Property-family registrations are a coverage aid,
+not a percentage-complete measure: families can still have unsupported value
+forms. After the Grid batch, 161 of the 185 property registrations have a family;
+24 remain without one. Update this list as groups finish. Keep optional rendering discoveries
+in `src/docs/layout-correctness.md` unless they block correct inline-style edits.
+The user has authorized worthwhile adjacent root-cause fixes too; distinguish
+those from prerequisites when reporting progress.
+
 ### Saved-page loading and next blockers (2026-10-11)
 
 The first captures exposed a prerequisite bug in Qt's local-file fetch callback:
@@ -2042,6 +2088,55 @@ for a separate rendering batch. Remaining specified-value families and modern
 aggregate-property modelling are still required before public CSSOM exposure.
 The Duktape style getter was checked again; its empty-object placeholder provides
 no transform or specified-value implementation to reuse.
+
+### Grid specified values and counted-bytecode traversal (2026-10-13)
+
+Committed the transform batch as `285fee12`. Native CSSOM now serializes the
+implemented `grid-template-columns`, `grid-template-rows` and `grid-auto-flow`
+values through generated family metadata. Specified track units, precision,
+`minmax()` and `repeat()` structure survive readback; rendering's expanded track
+array is not used to reconstruct authored values. Priorities, deferred values,
+owned assignments and declaration-block serialization use the same path.
+
+The two approximately 400-line track parsers are replaced by one shared parser.
+[CSS Grid track sizing](https://drafts.csswg.org/css-grid-2/#track-sizing)
+requires nonnegative lengths/percentages/flex, a comma inside `minmax()` and a
+non-flexible minimum. Validation now applies to every breadth, before fixed-point
+rounding, including quirks mode. Integer repeats accept a sequence of track sizes
+through the shared grammar, while nested repeats remain invalid. Parsing rejects
+a malformed suffix atomically and propagates allocation errors. The existing
+32-track implementation limit remains explicit: exceeding it rejects the whole
+declaration instead of silently truncating `repeat()`. This is still limited Grid
+support, not the specification's large-grid clamping algorithm. Named lines,
+auto-repeat, subgrid, fit-content and math remain separate capabilities.
+
+`grid-auto-flow` now accepts either keyword order and rejects duplicates,
+following [Grid section 7.7](https://drafts.csswg.org/css-grid-2/#propdef-grid-auto-flow).
+Readback follows [CSSOM canonical ordering and omission](https://drafts.csswg.org/cssom/#serialize-a-css-value):
+`dense column` becomes `column dense`, and redundant `row` with `dense` is omitted.
+
+The Qt restyle regression exposed a pre-existing counted-bytecode defect:
+`css__make_style_important()` interpreted Grid payload words as property OPVs,
+corrupting counts/units and causing a crash. The variable-collection scanner had
+the same omission, also affecting transforms. One shared payload-length helper
+now skips complete simple/minmax tracks and transform argument lists in both
+walkers. This changes no bytecode representation. Native tests verify that
+`!important` changes only the property OPV and that following custom properties
+still resolve; Qt captures verify the actual Grid and transform output.
+
+Coverage includes whole/byte-by-byte input, escaped names, exact numeric
+readback, repeated multi-track sequences, boundary counts, both axes, valid and
+invalid flow ordering, standards/quirks fallback, owned edits, cssText, bytecode
+equivalence and allocation-failure recovery. The new 17-case geometry fixture
+checks initial layout, two resizes, native checkbox restyling and restoration.
+
+Validation: all 84 selected native CSS/QuickJS/font/Grid/transform suites and all
+17 selected Qt regressions pass in Debug and Release. Debug native tests include
+ASan/UBSan and LeakSanitizer. Both builds are warning-free and `git diff --check`
+is clean. No GTK tests ran. The old Duktape style getter was checked again;
+its Modernizr empty-object placeholder has no native declaration implementation
+to reuse. Live `element.style` is still pending, tracked by the finite checklist
+near the start of this document.
 
 ## Assessment
 

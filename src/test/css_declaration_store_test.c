@@ -370,6 +370,19 @@ static const struct {
     const char *name, *value, *priority, *expected;
     bool important;
 } inputs[] = {
+    {"grid-template-columns", "REPEAT(+002,MINMAX(0,1FR) 2PX)", "important",
+        "repeat(2, minmax(0px, 1fr) 2px)", true},
+    {"grid-template-rows", "minmax(1EM,2%)repeat(1,AUTO)", "", "minmax(1em, 2%) repeat(1, auto)"},
+    {"grid-template-rows", "repeat(2,minmax(0,1fr)", "", "repeat(2, minmax(0px, 1fr))"},
+    {"grid-template-rows", "0px repeat(2,)", "", NULL},
+    {"grid-template-columns", "minmax(0 1fr)", "", NULL},
+    {"grid-template-columns", "minmax(1fr,2fr)", "", NULL},
+    {"grid-template-rows", "-.00000001px", "", NULL},
+    {"grid-template-rows", "repeat(32,1px) 2px", "", NULL},
+    {"grid-auto-flow", "DENSE COLUMN", "important", "column dense", true},
+    {"grid-auto-flow", "ROW DENSE", "", "dense"},
+    {"grid-auto-flow", "dense dense", "", NULL},
+    {"grid-auto-flow", "row column", "", NULL},
     {"transform", "TRANSLATEX(1.23456789em) scale(50%,.5) rotate(-0)", "important",
         "translateX(1.234568em) scale(0.5) rotate(0deg)", true},
     {"transform", "rotate(45deg", "", "rotate(45deg)"},
