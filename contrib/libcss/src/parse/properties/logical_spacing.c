@@ -6,6 +6,32 @@
 #include "parse/properties/properties.h"
 #include "parse/properties/utils.h"
 
+css_error css__parse_inline_side(
+    css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result, enum css_properties_e op)
+{
+    uint32_t before = result->used;
+    css_error error;
+    switch (op) {
+    case CSS_PROP_MARGIN_LEFT:
+    case CSS_PROP_MARGIN_RIGHT:
+        error = css__parse_margin_side(c, vector, ctx, result, op);
+        break;
+    case CSS_PROP_PADDING_LEFT:
+    case CSS_PROP_PADDING_RIGHT:
+        error = css__parse_padding_side(c, vector, ctx, result, op);
+        break;
+    case CSS_PROP_LEFT:
+    case CSS_PROP_RIGHT:
+        error = css__parse_side(c, vector, ctx, result, op);
+        break;
+    default:
+        return CSS_INVALID;
+    }
+    if (error == CSS_OK)
+        result->bytecode[before] |= buildOPV(0, FLAG_LOGICAL_INLINE, 0);
+    return error;
+}
+
 /* Parse one or two values using the ordinary side parsers. Replaying a single
  * value also handles CSS-wide keywords and calc bytecode without special cases.
  * Mapping follows the engine's current horizontal-tb logical property support. */
@@ -55,12 +81,12 @@ css_error css__parse_padding_block(css_language *c, const parserutils_vector *ve
 
 css_error css__parse_margin_inline(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
 {
-    return parse_pair(c, vector, ctx, result, css__parse_margin_left, css__parse_margin_right);
+    return parse_pair(c, vector, ctx, result, css__parse_margin_inline_start, css__parse_margin_inline_end);
 }
 
 css_error css__parse_padding_inline(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
 {
-    return parse_pair(c, vector, ctx, result, css__parse_padding_left, css__parse_padding_right);
+    return parse_pair(c, vector, ctx, result, css__parse_padding_inline_start, css__parse_padding_inline_end);
 }
 
 css_error css__parse_inset_block(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
@@ -70,5 +96,5 @@ css_error css__parse_inset_block(css_language *c, const parserutils_vector *vect
 
 css_error css__parse_inset_inline(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
 {
-    return parse_pair(c, vector, ctx, result, css__parse_left, css__parse_right);
+    return parse_pair(c, vector, ctx, result, css__parse_inset_inline_start, css__parse_inset_inline_end);
 }

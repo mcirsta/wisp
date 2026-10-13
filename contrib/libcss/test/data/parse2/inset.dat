@@ -80,8 +80,8 @@
 #errors
 #expected
 | *
-|  left: 0px
-|  right: 0px
+|  inset-inline-start: 0px
+|  inset-inline-end: 0px
 #reset
 
 #data
@@ -89,8 +89,8 @@
 #errors
 #expected
 | *
-|  left: 1px
-|  right: 2px
+|  inset-inline-start: 1px
+|  inset-inline-end: 2px
 #reset
 
 #data
@@ -98,8 +98,8 @@
 #errors
 #expected
 | *
-|  left: unset
-|  right: unset
+|  inset-inline-start: unset
+|  inset-inline-end: unset
 #reset
 
 #data

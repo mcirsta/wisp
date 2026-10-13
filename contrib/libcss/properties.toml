@@ -2476,3 +2476,63 @@ inherited = true
 bits = 2
 initial = "WRAP"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: WRAP_STRING:0,TEXT_WRAP_MODE_WRAP NOWRAP:0,TEXT_WRAP_MODE_NOWRAP IDENT:)'''
+
+[margin_inline_start]
+declaration_value = "length"
+logical_group = "margin"
+logical = true
+enum = "CSS_PROP_MARGIN_LEFT"
+inherited = false
+cascade = "none"
+computed = "none"
+parse = "WRAP:css__parse_inline_side"
+
+[margin_inline_end]
+declaration_value = "length"
+logical_group = "margin"
+logical = true
+enum = "CSS_PROP_MARGIN_RIGHT"
+inherited = false
+cascade = "none"
+computed = "none"
+parse = "WRAP:css__parse_inline_side"
+
+[padding_inline_start]
+declaration_value = "length"
+logical_group = "padding"
+logical = true
+enum = "CSS_PROP_PADDING_LEFT"
+inherited = false
+cascade = "none"
+computed = "none"
+parse = "WRAP:css__parse_inline_side"
+
+[padding_inline_end]
+declaration_value = "length"
+logical_group = "padding"
+logical = true
+enum = "CSS_PROP_PADDING_RIGHT"
+inherited = false
+cascade = "none"
+computed = "none"
+parse = "WRAP:css__parse_inline_side"
+
+[inset_inline_start]
+declaration_value = "length"
+logical_group = "inset"
+logical = true
+enum = "CSS_PROP_LEFT"
+inherited = false
+cascade = "none"
+computed = "none"
+parse = "WRAP:css__parse_inline_side"
+
+[inset_inline_end]
+declaration_value = "length"
+logical_group = "inset"
+logical = true
+enum = "CSS_PROP_RIGHT"
+inherited = false
+cascade = "none"
+computed = "none"
+parse = "WRAP:css__parse_inline_side"

@@ -30,6 +30,7 @@ enum flag_value {
 
 enum flag {
     FLAG_IMPORTANT = (1 << 0),
+    FLAG_LOGICAL_INLINE = (1 << 4), /* Left/right opcode denotes inline-start/end. */
     FLAG_INHERIT = (FLAG_VALUE_INHERIT << 1),
     FLAG_INITIAL = (FLAG_VALUE_INITIAL << 1),
     FLAG_REVERT = (FLAG_VALUE_REVERT << 1),

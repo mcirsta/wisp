@@ -873,6 +873,28 @@ static const struct {
     {"padding:1px 2px 3px 4px", "padding-right", "2px"},
     {"inset: AuTo -0 2em", "left", "0px"},
     {"margin-inline:1px 2em", "margin-inline-end", "2em"},
+    {"margin-inline:1px 2px;margin-inline-start:3px", "margin-inline", "3px 2px"},
+    {"margin-inline:1px 2px;margin-inline-end:3px", "margin-inline", "1px 3px"},
+    {"margin-inline:1px!important;margin-inline-end:3px", "margin-inline", "1px"},
+    {"margin-inline-start:1px!important;margin-inline-end:3px", "margin-inline", ""},
+    {"margin-inline:var(--Edges)", "margin-inline-start", ""},
+    {"margin-inline-end:calc(2px + 5%)", "margin-inline-end", "calc(5% + 2px)"},
+    {"margin-inline-start:inherit;margin-inline-end:inherit", "margin-inline", "inherit"},
+    {"padding-inline:1px 2px;padding-inline-start:3px", "padding-inline", "3px 2px"},
+    {"padding-inline:1px 2px;padding-inline-end:3px", "padding-inline", "1px 3px"},
+    {"padding-inline:1px!important;padding-inline-end:3px", "padding-inline", "1px"},
+    {"padding-inline-start:1px!important;padding-inline-end:3px", "padding-inline", ""},
+    {"padding-inline:var(--Edges)", "padding-inline-start", ""},
+    {"padding-inline-end:calc(2px + 5%)", "padding-inline-end", "calc(5% + 2px)"},
+    {"padding-inline-start:inherit;padding-inline-end:inherit", "padding-inline", "inherit"},
+    {"inset-inline:1px 2px;inset-inline-start:3px", "inset-inline", "3px 2px"},
+    {"inset-inline:1px 2px;inset-inline-end:3px", "inset-inline", "1px 3px"},
+    {"inset-inline:1px!important;inset-inline-end:3px", "inset-inline", "1px"},
+    {"inset-inline-start:1px!important;inset-inline-end:3px", "inset-inline", ""},
+    {"inset-inline:var(--Edges)", "inset-inline-start", ""},
+    {"inset-inline-end:calc(2px + 5%)", "inset-inline-end", "calc(5% + 2px)"},
+    {"inset-inline-start:inherit;inset-inline-end:inherit", "inset-inline", "inherit"},
+
     {"inset-block:1px 2em", "inset-block-start", "1px"},
     {"inset-block:1px 2em", "inset-block-end", "2em"},
     {"inset-block:auto", "inset-block-end", "auto"},
@@ -2644,11 +2666,10 @@ START_TEST(test_specified_values)
                 value_cases[_i].property, value_cases[_i].expected, lwc_string_data(value));
         }
         /* Specified values must survive serialize/reparse, including values
-         * more precise or larger than the renderer's fixed-point storage.
-         * Some logical members currently only have shorthand parse handlers. */
+         * more precise or larger than the renderer's fixed-point storage. */
         const char *name = value_cases[_i].property;
-        if (value != NULL && lwc_string_length(value) != 0 &&
-            (strncmp(name, "--", 2) == 0 || css_prop_lookup(name, strlen(name)) != NULL)) {
+        if (value != NULL && lwc_string_length(value) != 0) {
+            ck_assert(strncmp(name, "--", 2) == 0 || css_prop_lookup(name, strlen(name)) != NULL);
             size_t length = strlen(name) + 1 + lwc_string_length(value);
             char *css = malloc(length + 1);
             ck_assert_ptr_nonnull(css);

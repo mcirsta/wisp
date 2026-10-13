@@ -109,6 +109,18 @@ static void check_order(const css_declaration_store *store, const char *names)
 static const struct {
     const char *initial, *assignment, *expected, *order;
 } assignments[] = {
+    {"margin-inline:1px 2px;color:red", "margin-inline-start:3px", "margin-inline: 3px 2px; color: red;",
+        "margin-inline-start margin-inline-end color"},
+    {"margin-inline-start:1px;margin-left:2px;color:red", "margin-inline-start:3px",
+        "margin-left: 2px; color: red; margin-inline-start: 3px;", "margin-left color margin-inline-start"},
+    {"padding-inline:1px 2px;color:red", "padding-inline-start:3px", "padding-inline: 3px 2px; color: red;",
+        "padding-inline-start padding-inline-end color"},
+    {"padding-inline-start:1px;padding-left:2px;color:red", "padding-inline-start:3px",
+        "padding-left: 2px; color: red; padding-inline-start: 3px;", "padding-left color padding-inline-start"},
+    {"inset-inline:1px 2px;color:red", "inset-inline-start:3px", "inset-inline: 3px 2px; color: red;",
+        "inset-inline-start inset-inline-end color"},
+    {"inset-inline-start:1px;left:2px;color:red", "inset-inline-start:3px",
+        "left: 2px; color: red; inset-inline-start: 3px;", "left color inset-inline-start"},
     {"inset-block:1px 2px;color:red", "inset-block-start:3px", "inset-block: 3px 2px; color: red;",
         "inset-block-start inset-block-end color"},
     {"inset-block:1px 2px;color:red", "inset-block-end:auto", "inset-block: 1px auto; color: red;",

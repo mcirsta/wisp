@@ -88,6 +88,23 @@ class DeclarationMetadataTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'inset_block: unknown longhand'):
             self.reader.validate_declarations()
 
+    def test_inline_edge_registrations(self):
+        dispatch = {prop['name'] for prop in self.reader.get_dispatch_order()}
+        for group in ('margin', 'padding', 'inset'):
+            for edge, physical in (('start', 'left'), ('end', 'right')):
+                member = group + '_inline_' + edge
+                prop = self.reader.toml_data[member]
+                target = physical if group == 'inset' else group + '_' + physical
+                self.assertEqual(prop['enum'], self.reader.toml_data[target]['enum'])
+                self.assertEqual(prop['parse'], 'WRAP:css__parse_inline_side')
+                self.assertTrue(prop['logical'])
+                self.assertNotIn(member, dispatch)
+            missing = group + '_inline_start'
+            prop = self.reader.toml_data.pop(missing)
+            with self.assertRaisesRegex(ValueError, group + '_inline: unknown longhand'):
+                self.reader.validate_declarations()
+            self.reader.toml_data[missing] = prop
+
     def test_legacy_alias_validation(self):
         for aliases in ("grid-gap", [1], ["GRID-GAP"], ["grid_gap"], ["--gap"], ["gríd-gap"],
                         ["gap"], ["row-gap"], ["grid-row-gap"], ["grid-gap", "grid-gap"]):

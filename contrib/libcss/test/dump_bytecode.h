@@ -1690,6 +1690,17 @@ static void dump_bytecode(css_style *style, struct dump_output *out, uint32_t de
         for (uint32_t i = 0; i < depth; i++)
             dump_char(out, ' ');
         const char *name = op < sizeof(opcode_names) / sizeof(opcode_names[0]) ? opcode_names[op] : NULL;
+        if (getFlags(opv) & FLAG_LOGICAL_INLINE) {
+            switch (op) {
+            case CSS_PROP_MARGIN_LEFT: name = "margin-inline-start"; break;
+            case CSS_PROP_MARGIN_RIGHT: name = "margin-inline-end"; break;
+            case CSS_PROP_PADDING_LEFT: name = "padding-inline-start"; break;
+            case CSS_PROP_PADDING_RIGHT: name = "padding-inline-end"; break;
+            case CSS_PROP_LEFT: name = "inset-inline-start"; break;
+            case CSS_PROP_RIGHT: name = "inset-inline-end"; break;
+            default: break;
+            }
+        }
         dump_printf(out, "%s: ", name != NULL ? name : "unknown");
 
         if (css__is_background_list(opv)) {

@@ -59,7 +59,8 @@ as `840e2aea`. Non-finite calculations, shared simplification and generated
 property ranges are committed as `ed93be8d`; supported font/decoration identities
 as `908448f1`, independent background repeat axes as `03a81fd7`, and
 background position axes as `090573ab`, and white-space decomposition as
-`6b5f2d7b`.
+`6b5f2d7b`. Block inset registrations and shared logical pair parsing are committed
+as `71bfb770`.
 Earlier dated sections are historical records, not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
@@ -80,15 +81,15 @@ the target. Each group can require more than one tested batch:
   native validation/simplification, finite and non-finite readback/reparse,
   shorthand edit preservation, calculation precision and final range conversion.
   This does not add dimensional products or new math functions.
-- [ ] Modern aggregate property identities/decomposition and preservation:
+- [x] Modern aggregate property identities/decomposition and preservation:
   `font-variant` and `text-decoration` now decompose into their supported
   `font-variant-caps` and `text-decoration-line` longhands, sharing native
   parsing/cascade storage. Background repeat and position axes now have independent
   native lists, cascade and declaration edits. White-space now decomposes into
   independent collapse/wrapping longhands. Block start/end registrations are complete
   for the existing margin/padding/inset pairs. The six inline start/end names
-  still need direction-aware cascade mapping; their existing shorthands currently
-  map to left/right too early for RTL. This is part of the same group.
+  now have independent registrations and direction-aware cascade/composition,
+  including inherited direction and logical/physical ordering in RTL.
   Full new font/decoration grammars are
   not prerequisites for this target.
   Pending-substitution preservation has native edit coverage. Correction to
@@ -109,7 +110,7 @@ the target. Each group can require more than one tested batch:
 The earlier estimate of roughly 8–15 focused batches is a planning estimate,
 not a delivery guarantee. Property-family registrations are a coverage aid,
 not a percentage-complete measure: families can still have unsupported value
-forms. All 195 property registrations now have a family; this closes the
+forms. All 201 property registrations now have a family; this closes the
 unregistered-family work, not the remaining value forms or live binding.
 Update this list as groups finish. Keep
 optional rendering discoveries in `src/docs/layout-correctness.md` unless they
@@ -2857,6 +2858,68 @@ would repeat the existing RTL error. Keep that dependency explicit in the next
 batch. Vertical writing modes and additional logical property families remain
 outside this checklist. No new JS API is exposed by this batch; the Duktape
 placeholder style getter offers no implementation to reuse here.
+
+### Direction-aware inline edges and aggregate prerequisite closure (2026-10-13)
+
+Committed the block-edge/shared-parser batch as `71bfb770`. The six
+`margin-inline-start/end`, `padding-inline-start/end` and `inset-inline-start/end`
+longhands now have independent registrations, specified readback and edits.
+Their shorthands use the same longhand parsers. The generator now rejects every
+unregistered shorthand member; the temporary inline-pair exception and the
+readback test's missing-parser bypass are gone. This completes the aggregate
+identity group in the finite checklist above.
+
+The old inline pair parsers mapped start/end directly to left/right before
+direction was available. Simply registering more aliases would preserve that
+RTL error. Bytecode now marks the logical identity while retaining the physical
+operand format. Selection uses the existing native cascade for both possible
+horizontal mappings, retaining only six alternative edge values and their
+priority states. Parent composition resolves direction and publishes ordinary
+physical values for layout. Root selection resolves immediately. No selector
+replay, global direction state or layout exception is introduced.
+
+This follows [CSS Logical 1 §4](https://drafts.csswg.org/css-logical-1/#box):
+logical/physical values cascade together using the element's own direction;
+explicit logical inheritance takes the corresponding logical edge on the parent.
+The draft retains an open inheritance issue, but the implementation and tests
+follow its current normative text, including opposite parent/child directions.
+Mapping covers horizontal-tb only; vertical writing modes and other new logical
+property families are outside this prerequisite.
+
+Affected partial styles own 104 bytes of alternatives on this 64-bit build;
+the computed-style struct adds one pointer. Fully composed styles have no
+alternative allocation. Selection adds 1,200 bytes of priority state across its
+pseudo-element slots, rather than another full computed style. Interning compares
+both alternatives and logical-inherit masks; cloning, origin-revert snapshots,
+calc references and destruction preserve their ownership. The root's in-place
+resolution retains a calc string before a setter releases the previous slot.
+This is an implementation cost description, not a new page-speed benchmark.
+
+Native coverage includes stylesheet/inline declarations, priority and source
+order, late direction variables, invalid substitution, root defaults, opposite
+parent directions, pseudo-elements and deferred origin/direction revert. Reusing
+a cloned partial style under either direction after deleting its source sheet
+is tested, as are styles differing only in RTL values or logical-inherit masks.
+Declaration suites cover independent edits/readback, pending substitutions,
+logical/physical ordering and serialization/reparse. Existing pair-parser
+allocation-failure coverage still applies to all six shorthands.
+
+All 76 selected native suites pass in Release and Debug, with clean
+ASan/UBSan/LSan checks. Nine new Qt physical-reference cases verify geometry and
+pixels, including LTR → RTL → LTR native checked-state refreshes, equivalent
+selective/full refresh output, pseudo-elements, relative positioning and flex
+items. Eight Release Qt rendering suites and ten Debug Qt suites pass. The
+log-dependent `qt_js_dom` was also attempted in Release and failed on absent
+console output: non-Debug builds deliberately define `WISP_DISABLE_LOGGING`.
+It passes in Debug, alongside JS innerHTML integration. Both builds are
+warning-free; GTK/Windows were not built. Sanitizers also caught a missing
+dummy-parent cleanup in the new native test, which was corrected before the
+final passing run.
+
+Next is the QuickJS `CSSStyleProperties` object, then the already-listed DOM
+synchronization and lifetime/live-target checks. No new JS API is exposed by
+this batch. Duktape's previously reviewed placeholder style getter supplies no
+native declaration implementation to reuse here.
 
 ## Assessment
 

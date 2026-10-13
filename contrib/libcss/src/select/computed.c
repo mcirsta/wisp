@@ -14,6 +14,7 @@
 #include "select/calc.h"
 #include "select/computed.h"
 #include "select/background.h"
+#include "select/logical.h"
 #include "select/dispatch.h"
 #include "select/propget.h"
 #include "select/propset.h"
@@ -181,6 +182,7 @@ css_error css_computed_style_destroy(css_computed_style *style)
     if (style->i.list_style_image != NULL)
         lwc_string_unref(style->i.list_style_image);
     css__background_destroy(style);
+    css__inline_edges_destroy(style);
 
     if (style->i.background_image != NULL)
         lwc_string_unref(style->i.background_image);
@@ -278,6 +280,11 @@ css_error css__computed_style_clone(const css_computed_style *orig, css_computed
         }
     }
 
+    error = css__inline_edges_clone(orig, clone);
+    if (error != CSS_OK) {
+        css_computed_style_destroy(clone);
+        return error;
+    }
     *clone_out = clone;
     return CSS_OK;
 }
@@ -321,6 +328,8 @@ css_error css_computed_style_compose(const css_computed_style *restrict parent,
             return error;
         }
     }
+
+    css__inline_edges_compose(parent, child, composed);
 
     /* Finally, compute absolute values for everything */
     error = css__compute_absolute_values(parent, composed, unit_ctx);

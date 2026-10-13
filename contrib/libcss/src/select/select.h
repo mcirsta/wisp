@@ -16,6 +16,7 @@
 #include "stylesheet.h"
 #include "select/variables.h"
 #include "select/hash.h"
+#include "select/logical.h"
 
 /**
  * Item in the reject cache (only class and id types are valid)
@@ -29,7 +30,8 @@ typedef struct prop_state {
     uint32_t specificity; /* Specificity of property in result */
     unsigned int set : 1, /* Whether property is set in result */
         origin : 2, /* Origin of property in result */
-        important : 1; /* Importance of property in result */
+        important : 1, /* Importance of property in result */
+        logical : 1; /* Winning declaration names an inline logical edge. */
     enum flag_value explicit_default : 3; /* Property is set to inherit */
 } prop_state;
 
@@ -60,6 +62,7 @@ struct css_node_data {
 
 struct revert_data {
     prop_state props[CSS_N_PROPERTIES][CSS_PSEUDO_ELEMENT_COUNT];
+    prop_state inline_props[CSS_INLINE_EDGE_COUNT][CSS_PSEUDO_ELEMENT_COUNT];
     css_computed_style *style[CSS_PSEUDO_ELEMENT_COUNT];
 };
 
@@ -109,12 +112,15 @@ typedef struct css_select_state {
 
     css_var_context *var_ctx[CSS_PSEUDO_ELEMENT_COUNT];
     css_var_context *var_parent; /* Inherited snapshot before empty-overlay reuse */
+    bool current_logical; /* Mapping identity of the declaration being cascaded */
+    bool rtl_inline; /* Temporarily cascading/defaulting an RTL edge alternative */
     bool collecting_vars; /* First pass: collect final custom properties only */
     css_pseudo_var_rule *pseudo_var_rules;
     uint32_t n_pseudo_var_rules;
     uint32_t pseudo_var_rules_capacity;
 
     prop_state props[CSS_N_PROPERTIES][CSS_PSEUDO_ELEMENT_COUNT];
+    prop_state inline_props[CSS_INLINE_EDGE_COUNT][CSS_PSEUDO_ELEMENT_COUNT];
 } css_select_state;
 
 static inline void advance_bytecode(css_style *style, uint32_t n_bytes)
@@ -122,6 +128,8 @@ static inline void advance_bytecode(css_style *style, uint32_t n_bytes)
     style->used -= (n_bytes / sizeof(css_code_t));
     style->bytecode = style->bytecode + (n_bytes / sizeof(css_code_t));
 }
+
+css_error css__cascade_property(css_code_t opv, css_style *style, css_select_state *state);
 
 bool css__outranks_existing(uint16_t op, bool important, css_select_state *state, enum flag_value explicit_default);
 

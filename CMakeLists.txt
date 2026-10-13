@@ -430,6 +430,7 @@ if(WISP_ENABLE_LIBCSS_TESTS)
   add_test(NAME libcss_var_context COMMAND libcss_var_context)
 
   add_libcss_test_exe(libcss_var_resolve ${LIBCSSL_TEST_DIR}/var-resolve.c)
+  target_include_directories(libcss_var_resolve PRIVATE "${CMAKE_BINARY_DIR}/contrib/libcss/src/select")
   add_test(NAME libcss_var_resolve COMMAND libcss_var_resolve)
 
   add_libcss_test_exe(libcss_calc_props ${LIBCSSL_TEST_DIR}/calc_props.c)

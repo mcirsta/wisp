@@ -590,6 +590,10 @@ if(WISP_QT_CAPTURE)
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_white_space_longhands.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
             set_tests_properties(qt_white_space_longhands PROPERTIES TIMEOUT 30)
+            add_test(NAME qt_logical_inline
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_logical_inline.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_logical_inline PROPERTIES TIMEOUT 45)
             add_test(NAME qt_background_layers
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_background_layers.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})

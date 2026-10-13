@@ -15,6 +15,7 @@
 
 #include "testutils.h"
 #include "select/select.h"
+#include "select/computed.h"
 #include "stylesheet.h"
 #include <nsutils/time.h>
 
@@ -2114,6 +2115,252 @@ static void test_background_position_axes(void)
     }
 }
 
+/* Spec-derived edge mapping cases shared by the three logical groups. */
+static const struct {
+    const char *names[5]; /* shorthand, start, end, physical left, physical right */
+    length_getter left, right;
+    unsigned set, initial;
+} inline_groups[] = {
+    {{"margin-inline", "margin-inline-start", "margin-inline-end", "margin-left", "margin-right"},
+        css_computed_margin_left, css_computed_margin_right, CSS_MARGIN_SET, CSS_MARGIN_SET},
+    {{"padding-inline", "padding-inline-start", "padding-inline-end", "padding-left", "padding-right"},
+        css_computed_padding_left, css_computed_padding_right, CSS_PADDING_SET, CSS_PADDING_SET},
+    {{"inset-inline", "inset-inline-start", "inset-inline-end", "left", "right"},
+        css_computed_left, css_computed_right, CSS_LEFT_SET, CSS_LEFT_AUTO},
+};
+
+static void inline_declarations(char *out, size_t size, unsigned group, const char *source)
+{
+    const char *keys = "pselr";
+    size_t used = 0;
+    while (*source) {
+        if (*source != '$') {
+            assert(used + 1 < size);
+            out[used++] = *source++;
+            continue;
+        }
+        const char *key = strchr(keys, source[1]);
+        assert(key != NULL && source[1] != 0);
+        const char *name = inline_groups[group].names[key - keys];
+        size_t length = strlen(name);
+        assert(used + length < size);
+        memcpy(out + used, name, length);
+        used += length;
+        source += 2;
+    }
+    out[used] = 0;
+}
+
+enum { INLINE_INITIAL = 9999 };
+static void expect_inline_edges(const css_computed_style *style, unsigned group, const char *css, int left, int right)
+{
+    int values[] = {left, right};
+    length_getter getters[] = {inline_groups[group].left, inline_groups[group].right};
+    for (unsigned side = 0; side < 2; side++) {
+        if (values[side] == INLINE_INITIAL && inline_groups[group].initial != inline_groups[group].set)
+            expect_length_type(css, style, getters[side], inline_groups[group].initial);
+        else
+            expect_length_px(css, style, getters[side], inline_groups[group].set,
+                values[side] == INLINE_INITIAL ? 0 : values[side]);
+    }
+}
+
+static void test_inline_edges_cascade(void)
+{
+    static const struct { const char *css; int ltr[2], rtl[2]; } cases[] = {
+        {"$p:1px 2px", {1,2}, {2,1}},
+        {"$s:1px;$l:3px;$e:2px", {3,2}, {2,1}},
+        {"$s:1px;$r:3px;$e:2px", {1,2}, {2,3}},
+        {"$l:3px;$s:1px;$e:2px", {1,2}, {2,1}},
+        {"$p:1px 2px;$l:3px", {3,2}, {3,1}},
+        {"$l:3px!important;$p:1px 2px", {3,2}, {3,1}},
+        {"$s:1px!important;$p:3px 4px", {1,4}, {4,1}},
+        {"$p:1px!important;$e:4px!important", {1,4}, {4,1}},
+        {"--x:5px;$s:calc(var(--x) + 2px);$e:2px", {7,2}, {2,7}},
+        {"--x:1px 2px;$p:var(--x);$e:5px", {1,5}, {5,1}},
+        {"$p:1px 2px;$s:initial", {INLINE_INITIAL,2}, {2,INLINE_INITIAL}},
+        {"$p:1px 2px;$s:unset", {INLINE_INITIAL,2}, {2,INLINE_INITIAL}},
+        {"$p:1px 2px;$s:inherit", {INLINE_INITIAL,2}, {2,INLINE_INITIAL}},
+        {"$p:1px 2px;$s:var(--missing)", {INLINE_INITIAL,2}, {2,INLINE_INITIAL}},
+        {"$p:1px 2px;$s:calc(1em + 5%)", {26,2}, {2,26}},
+        {"$p:1px 2px;$s:32768px;--w:3px;width:var(--w)", {32768,2}, {2,32768}},
+    };
+    for (unsigned group = 0; group < 3; group++) {
+        for (unsigned rtl = 0; rtl < 2; rtl++) {
+            for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+                for (unsigned inlined = 0; inlined < 2; inlined++) {
+                    char values[512], declarations[640], css[680];
+                    inline_declarations(values, sizeof(values), group, cases[i].css);
+                    snprintf(declarations, sizeof(declarations),
+                        "position:absolute;font-size:16px;direction:ltr;%s;direction:var(--dir);--dir:%s",
+                        values, rtl ? "rtl" : "ltr");
+                    snprintf(css, sizeof(css), "div {%s}", declarations);
+                    style_case ctx;
+                    setup_style_case(&ctx, inlined ? "" : css);
+                    if (inlined)
+                        ctx.inline_style = create_stylesheet_from_css(declarations, true, false);
+                    const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, ctx.inline_style, &ctx.results);
+                    const int *expected = rtl ? cases[i].rtl : cases[i].ltr;
+                    expect_inline_edges(style, group, css, expected[0], expected[1]);
+                    assert(style->inline_edges == NULL); /* Root is fully resolved. */
+                    destroy_style_case(&ctx);
+                }
+            }
+        }
+    }
+}
+
+static void test_inline_edges_compose(void)
+{
+    for (unsigned group = 0; group < 3; group++) {
+        for (unsigned parent_rtl = 0; parent_rtl < 2; parent_rtl++) {
+            for (unsigned child_rtl = 0; child_rtl < 2; child_rtl++) {
+                for (unsigned logical = 0; logical < 2; logical++) {
+                    style_case p, c;
+                    char edges[256], css[384];
+                    inline_declarations(edges, sizeof(edges), group, "$l:11px;$r:17px");
+                    snprintf(css, sizeof(css), "div {position:absolute;direction:%s;%s}", parent_rtl ? "rtl" : "ltr", edges);
+                    const css_computed_style *parent = select_style_from_css(css, &p);
+                    inline_declarations(edges, sizeof(edges), group, logical ? "$p:inherit" : "$p:5px;$l:inherit;$r:inherit");
+                    snprintf(css, sizeof(css), "div {position:absolute;direction:%s;%s}", child_rtl ? "rtl" : "ltr", edges);
+                    setup_style_case(&c, css);
+                    c.node.parent = &p.node;
+                    const css_computed_style *child = select_style_for_node(&c, &c.node, NULL, &c.results);
+                    assert(child->inline_edges != NULL);
+                    css_computed_style *composed;
+                    assert(css_computed_style_compose(parent, child, &unit_ctx, &composed) == CSS_OK);
+                    destroy_style_case(&c);
+                    destroy_style_case(&p);
+                    bool swap = logical && parent_rtl != child_rtl;
+                    expect_inline_edges(composed, group, css, swap ? 17 : 11, swap ? 11 : 17);
+                    assert(composed->inline_edges == NULL);
+                    css_computed_style_destroy(composed);
+                }
+            }
+        }
+    }
+    /* A single immutable partial style must compose under either direction,
+     * even after the originating sheet and node data have been destroyed. */
+    style_case c, p[2];
+    setup_style_case(&c, "div {position:absolute;font-size:16px;margin-inline:calc(1em + 5%) 2px}");
+    test_node dummy = {0};
+    c.node.parent = &dummy;
+    const css_computed_style *child = select_style_for_node(&c, &c.node, NULL, &c.results);
+    css_computed_style *copy;
+    assert(css__computed_style_clone(child, &copy) == CSS_OK);
+    destroy_style_case(&c);
+    destroy_node_data(&dummy);
+    for (unsigned rtl = 0; rtl < 2; rtl++) {
+        const css_computed_style *parent = select_style_from_css(rtl ? "div {direction:rtl}" : "div {direction:ltr}", &p[rtl]);
+        css_computed_style *composed;
+        assert(css_computed_style_compose(parent, copy, &unit_ctx, &composed) == CSS_OK);
+        destroy_style_case(&p[rtl]);
+        expect_inline_edges(composed, 0, "reused partial calc", rtl ? 2 : 26, rtl ? 26 : 2);
+        css_computed_style_destroy(composed);
+    }
+    css_computed_style_destroy(copy);
+}
+
+static void test_inline_edges_revert(void)
+{
+    for (unsigned group = 0; group < 3; group++) {
+        for (unsigned deferred = 0; deferred < 2; deferred++) {
+            for (unsigned lower_logical = 0; lower_logical < 2; lower_logical++) {
+                char values[256], author_css[384], user_css[256];
+                inline_declarations(values, sizeof(values), group, deferred ?
+                    "$p:11px 17px;$s:var(--missing,revert)" : "$p:11px 17px;$s:revert");
+                snprintf(author_css, sizeof(author_css), "div {position:absolute;direction:rtl;%s}", values);
+                inline_declarations(values, sizeof(values), group, lower_logical ? "$p:3px 5px" : "$l:3px;$r:5px");
+                snprintf(user_css, sizeof(user_css), "div {%s}", values);
+                style_case ctx;
+                setup_style_case(&ctx, author_css);
+                css_stylesheet *user = create_stylesheet_from_css(user_css, false, false);
+                assert(css_select_ctx_insert_sheet(ctx.select_ctx, user, 0, CSS_ORIGIN_USER, NULL) == CSS_OK);
+                const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+                expect_inline_edges(style, group, author_css, 17, lower_logical ? 3 : 5);
+                destroy_style_case(&ctx);
+                css_stylesheet_destroy(user);
+            }
+        }
+    }
+}
+
+static void test_inline_edges_interning(void)
+{
+    static const struct { const char *a, *b; int left_a, right_a, left_b, right_b; } cases[] = {
+        {"margin-inline-start:1px;margin-left:3px;margin-inline-end:2px",
+            "margin-inline-start:7px;margin-left:3px;margin-inline-end:2px", 2,1,2,7},
+        {"direction:ltr;margin-inline:inherit",
+            "direction:ltr;margin-inline:inherit;margin-left:inherit;margin-right:inherit", 17,11,11,17},
+    };
+    for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        style_case p, a, b;
+        const css_computed_style *parent = select_style_from_css("div {direction:rtl;margin-left:11px;margin-right:17px}", &p);
+        char css[256];
+        snprintf(css, sizeof(css), "div {%s}", cases[i].a);
+        setup_style_case(&a, css);
+        snprintf(css, sizeof(css), "div {%s}", cases[i].b);
+        setup_style_case(&b, css);
+        a.node.parent = b.node.parent = &p.node;
+        const css_computed_style *first = select_style_for_node(&a, &a.node, NULL, &a.results);
+        const css_computed_style *second = select_style_for_node(&b, &b.node, NULL, &b.results);
+        /* Both the RTL values and the logical-inherit masks distinguish styles
+         * whose main scalar fields would otherwise look identical. */
+        assert(first != second);
+        css_computed_style *out;
+        assert(css_computed_style_compose(parent, first, &unit_ctx, &out) == CSS_OK);
+        expect_inline_edges(out, 0, cases[i].a, cases[i].left_a, cases[i].right_a);
+        css_computed_style_destroy(out);
+        assert(css_computed_style_compose(parent, second, &unit_ctx, &out) == CSS_OK);
+        expect_inline_edges(out, 0, cases[i].b, cases[i].left_b, cases[i].right_b);
+        css_computed_style_destroy(out);
+        destroy_style_case(&a);
+        destroy_style_case(&b);
+        destroy_style_case(&p);
+    }
+}
+
+static void test_inline_edges_pseudo(void)
+{
+    for (unsigned group = 0; group < 3; group++) {
+        for (unsigned rtl = 0; rtl < 2; rtl++) {
+            char values[256], author[768], user[384];
+            inline_declarations(values, sizeof(values), group, "$l:11px;$r:17px");
+            snprintf(author, sizeof(author), "div {direction:rtl;position:absolute;%s}", values);
+            size_t used = strlen(author);
+            inline_declarations(values, sizeof(values), group, "$p:var(--missing,inherit)");
+            snprintf(author + used, sizeof(author) - used,
+                "div::before {direction:%s;position:absolute;%s}", rtl ? "rtl" : "ltr", values);
+            style_case ctx;
+            const css_computed_style *base = select_style_from_css(author, &ctx);
+            css_computed_style *pseudo;
+            assert(css_computed_style_compose(base, ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE],
+                &unit_ctx, &pseudo) == CSS_OK);
+            expect_inline_edges(pseudo, group, author, rtl ? 11 : 17, rtl ? 17 : 11);
+            css_computed_style_destroy(pseudo);
+            destroy_style_case(&ctx);
+
+            /* Direction can itself revert. Deferred logical revert also needs
+             * the pseudo's alternative snapshot from the lower origin. */
+            inline_declarations(values, sizeof(values), group, "$p:3px 5px");
+            snprintf(user, sizeof(user), "div::before {direction:%s;%s}", rtl ? "rtl" : "ltr", values);
+            inline_declarations(values, sizeof(values), group, "$p:11px 17px;$s:var(--missing,revert)");
+            snprintf(author, sizeof(author),
+                "div {direction:ltr} div::before {position:absolute;direction:var(--missing,revert);%s}", values);
+            setup_style_case(&ctx, author);
+            css_stylesheet *sheet = create_stylesheet_from_css(user, false, false);
+            assert(css_select_ctx_insert_sheet(ctx.select_ctx, sheet, 0, CSS_ORIGIN_USER, NULL) == CSS_OK);
+            base = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+            assert(css_computed_style_compose(base, ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE],
+                &unit_ctx, &pseudo) == CSS_OK);
+            expect_inline_edges(pseudo, group, author, rtl ? 17 : 3, rtl ? 3 : 17);
+            css_computed_style_destroy(pseudo);
+            destroy_style_case(&ctx);
+            css_stylesheet_destroy(sheet);
+        }
+    }
+}
+
 /* CSS Logical 1: block edges map to top/bottom in horizontal-tb for both
  * directions. Physical and logical declarations still compete in one cascade. */
 static void test_block_inset_longhands(void)
@@ -2506,6 +2753,11 @@ int main(int argc, char **argv)
     test_background_position_axes();
     test_white_space_longhands();
     test_block_inset_longhands();
+    test_inline_edges_cascade();
+    test_inline_edges_compose();
+    test_inline_edges_revert();
+    test_inline_edges_interning();
+    test_inline_edges_pseudo();
     test_aggregate_longhand_values();
     test_gap_aliases();
     test_deferred_revert();

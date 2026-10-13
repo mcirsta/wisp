@@ -1132,6 +1132,7 @@ static css_error css__select_save_revert_origin(css_select_state *state, css_ori
             return error;
     }
     memcpy(state->revert[origin].props, state->props, sizeof(state->props));
+    memcpy(state->revert[origin].inline_props, state->inline_props, sizeof(state->inline_props));
     return CSS_OK;
 }
 
@@ -1146,6 +1147,16 @@ static css_error css__select_revert_property_to_origin(css_select_state *select_
 
     if (select_state->revert[origin].style[pseudo] == NULL) {
         return prop_dispatch[property].initial(select_state);
+    }
+
+    const css_computed_style *saved = select_state->revert[origin].style[pseudo];
+    if (select_state->rtl_inline) {
+        int index = css__inline_edge_index(property);
+        assert(index >= 0);
+        css__inline_edge_copy(saved, select_state->computed, index, true);
+        *prop_state = saved->inline_edges != NULL ? select_state->revert[origin].inline_props[index][pseudo] :
+            select_state->revert[origin].props[property][pseudo];
+        return CSS_OK;
     }
 
     error = prop_dispatch[property].copy(
@@ -1188,6 +1199,36 @@ static css_error css__select_revert_property(css_select_state *select_state, pro
     }
 
     return CSS_OK;
+}
+
+/* Resolve defaults in the active native slot, for an ordinary property or
+ * one temporarily swapped RTL alternative. Revert snapshots use the same mapping. */
+static css_error select_default_property(css_select_state *state, uint32_t property, void *parent)
+{
+    css_pseudo_element pseudo = state->current_pseudo;
+    prop_state *prop = &state->props[property][pseudo];
+    if (prop->explicit_default == FLAG_VALUE_REVERT) {
+        css_error error = css__select_revert_property(state, prop, pseudo, property);
+        if (error != CSS_OK)
+            return error;
+    }
+    if (prop->explicit_default == FLAG_VALUE_UNSET)
+        prop->explicit_default = prop_dispatch[property].inherited ? FLAG_VALUE_INHERIT : FLAG_VALUE_INITIAL;
+    if (prop->explicit_default == FLAG_VALUE_INITIAL || !prop->set ||
+        (pseudo == CSS_PSEUDO_ELEMENT_NONE && parent == NULL && prop->explicit_default == FLAG_VALUE_INHERIT))
+        return set_initial(state, property, pseudo, parent);
+    return CSS_OK;
+}
+
+static void select_inline_swap(css_select_state *state, unsigned index)
+{
+    opcode_t op = css__inline_edge_opcode(index);
+    css_pseudo_element pseudo = state->current_pseudo;
+    css__inline_edge_swap(state->computed, index);
+    prop_state temp = state->props[op][pseudo];
+    state->props[op][pseudo] = state->inline_props[index][pseudo];
+    state->inline_props[index][pseudo] = temp;
+    state->rtl_inline = !state->rtl_inline;
 }
 
 static bool css__stylesheet_tree_uses_variables(const css_stylesheet *sheet)
@@ -1446,75 +1487,34 @@ select_again:
         }
     }
 
-    /* Fix up any remaining unset properties. */
-
-    /* Base element */
-    state.current_pseudo = CSS_PSEUDO_ELEMENT_NONE;
-    state.computed = state.results->styles[CSS_PSEUDO_ELEMENT_NONE];
-    for (i = 0; i < CSS_N_PROPERTIES; i++) {
-        prop_state *prop = &state.props[i][CSS_PSEUDO_ELEMENT_NONE];
-
-        if (prop->explicit_default == FLAG_VALUE_REVERT) {
-            if (state.revert == NULL)
+    /* Default each partial style. Both inline mappings must survive until
+     * composition: an inherited direction is deliberately unresolved here. */
+    for (j = CSS_PSEUDO_ELEMENT_NONE; j < CSS_PSEUDO_ELEMENT_COUNT; j++) {
+        state.current_pseudo = j;
+        state.computed = state.results->styles[j];
+        if (state.computed == NULL)
+            continue;
+        for (i = 0; i < CSS_N_PROPERTIES; i++) {
+            if (state.props[i][j].explicit_default == FLAG_VALUE_REVERT && state.revert == NULL)
                 goto restart_with_revert;
-            error = css__select_revert_property(&state, prop, CSS_PSEUDO_ELEMENT_NONE, i);
-            if (error != CSS_OK) {
-                goto cleanup;
-            }
-        }
-
-        if (prop->explicit_default == FLAG_VALUE_UNSET) {
-            if (prop_dispatch[i].inherited == true) {
-                prop->explicit_default = FLAG_VALUE_INHERIT;
-            } else {
-                prop->explicit_default = FLAG_VALUE_INITIAL;
-            }
-        }
-
-        /* If the property is still unset or it's set to inherit
-         * and we're the root element, then set it to its initial
-         * value. */
-        if (prop->explicit_default == FLAG_VALUE_INITIAL || prop->set == false ||
-            (parent == NULL && prop->explicit_default == FLAG_VALUE_INHERIT)) {
-            error = set_initial(&state, i, CSS_PSEUDO_ELEMENT_NONE, parent);
+            error = select_default_property(&state, i, parent);
             if (error != CSS_OK)
                 goto cleanup;
         }
-    }
-
-    /* Pseudo elements, if any */
-    for (j = CSS_PSEUDO_ELEMENT_NONE + 1; j < CSS_PSEUDO_ELEMENT_COUNT; j++) {
-        state.current_pseudo = j;
-        state.computed = state.results->styles[j];
-
-        /* Skip non-existent pseudo elements */
-        if (state.computed == NULL)
-            continue;
-
-        for (i = 0; i < CSS_N_PROPERTIES; i++) {
-            prop_state *prop = &state.props[i][j];
-
-            if (prop->explicit_default == FLAG_VALUE_REVERT) {
-                if (state.revert == NULL)
+        if (state.computed->inline_edges != NULL) {
+            for (i = 0; i < CSS_INLINE_EDGE_COUNT; i++) {
+                opcode_t op = css__inline_edge_opcode(i);
+                if (state.props[op][j].logical)
+                    state.computed->inline_edges->inherit_logical[0] |= 1u << i;
+                select_inline_swap(&state, i);
+                bool retry = state.props[op][j].explicit_default == FLAG_VALUE_REVERT && state.revert == NULL;
+                if (!retry)
+                    error = select_default_property(&state, op, parent);
+                if (state.props[op][j].logical)
+                    state.computed->inline_edges->inherit_logical[1] |= 1u << i;
+                select_inline_swap(&state, i);
+                if (retry)
                     goto restart_with_revert;
-                error = css__select_revert_property(&state, prop, j, i);
-                if (error != CSS_OK) {
-                    goto cleanup;
-                }
-            }
-
-            if (prop->explicit_default == FLAG_VALUE_UNSET) {
-                if (prop_dispatch[i].inherited == true) {
-                    prop->explicit_default = FLAG_VALUE_INHERIT;
-                } else {
-                    prop->explicit_default = FLAG_VALUE_INITIAL;
-                }
-            }
-
-            /* If the property is still unset then set it
-             * to its initial value. */
-            if (prop->explicit_default == FLAG_VALUE_INITIAL || prop->set == false) {
-                error = set_initial(&state, i, j, parent);
                 if (error != CSS_OK)
                     goto cleanup;
             }
@@ -1526,6 +1526,10 @@ select_again:
      * computed, and the default border-{top,right,bottom,left}-color
      * is set to the computed value of color. */
     if (parent == NULL) {
+        /* Root direction is resolved. Publish only ordinary physical values. */
+        css_computed_style *root = state.results->styles[CSS_PSEUDO_ELEMENT_NONE];
+        css__inline_edges_compose(NULL, root, root);
+        css__inline_edges_destroy(root);
         /* Only compute absolute values for the base element */
         error = css__compute_absolute_values(NULL, state.results->styles[CSS_PSEUDO_ELEMENT_NONE], unit_ctx);
         if (error != CSS_OK)
@@ -3189,12 +3193,48 @@ static css_error cascade_style_properties(const css_style *style, css_select_sta
             CSS_LOG(ERROR, "Invalid opcode %d >= CSS_N_PROPERTIES %d", op, CSS_N_PROPERTIES);
         }
 
-        error = prop_dispatch[op].cascade(opv, &s, state);
+        error = css__cascade_property(opv, &s, state);
         if (error != CSS_OK)
             return error;
     }
 
     return CSS_OK;
+}
+
+/* Shared by literal declarations and variable-substituted bytecode. Only
+ * inline edges in styles with logical declarations need the second cascade. */
+css_error css__cascade_property(css_code_t opv, css_style *style, css_select_state *state)
+{
+    opcode_t op = getOpcode(opv);
+    int index = css__inline_edge_index(op);
+    bool logical = (getFlags(opv) & FLAG_LOGICAL_INLINE) != 0;
+    if (logical) {
+        if (index < 0)
+            return CSS_INVALID;
+        if (state->computed->inline_edges == NULL) {
+            css_error error = css__inline_edges_create(state->computed);
+            if (error != CSS_OK)
+                return error;
+            for (unsigned i = 0; i < CSS_INLINE_EDGE_COUNT; i++)
+                state->inline_props[i][state->current_pseudo] =
+                    state->props[css__inline_edge_opcode(i)][state->current_pseudo];
+        }
+    }
+    bool previous = state->current_logical;
+    state->current_logical = logical;
+    css_style alternate = *style;
+    opv = buildOPV(op, getFlags(opv) & ~FLAG_LOGICAL_INLINE, getValue(opv));
+    css_error error = prop_dispatch[op].cascade(opv, style, state);
+    if (error == CSS_OK && index >= 0 && state->computed->inline_edges != NULL) {
+        unsigned rtl_index = logical ? (unsigned)index ^ 1u : (unsigned)index;
+        opcode_t rtl_op = css__inline_edge_opcode(rtl_index);
+        select_inline_swap(state, rtl_index);
+        error = prop_dispatch[rtl_op].cascade(buildOPV(rtl_op, getFlags(opv), getValue(opv)), &alternate, state);
+        select_inline_swap(state, rtl_index);
+        assert(error != CSS_OK || alternate.used == style->used);
+    }
+    state->current_logical = previous;
+    return error;
 }
 
 bool css__outranks_existing(uint16_t op, bool important, css_select_state *state, enum flag_value explicit_default)
@@ -3289,6 +3329,7 @@ bool css__outranks_existing(uint16_t op, bool important, css_select_state *state
         existing->origin = state->current_origin;
         existing->important = important;
         existing->explicit_default = explicit_default;
+        existing->logical = state->current_logical;
     }
 
     return outranks;

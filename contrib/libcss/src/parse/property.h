@@ -79,9 +79,7 @@ struct css_prop_entry {
     enum css_logical_property_group logical_group;
     bool shorthand;
     bool logical;
-    /* Supported CSS longhands in declaration order, not bytecode order.
-     * Some logical start/end names are only implemented through a shorthand.
-     * This does not expand their values or expose additional parse handlers. */
+    /* Registered CSS longhands in declaration order, not bytecode order. */
     const char *const *longhands;
     size_t longhand_count;
     enum css_declaration_value_kind value_kind;

@@ -763,8 +763,7 @@ static css_error css__cascade_resolved_style(
                 getFlags(result_opv) | FLAG_IMPORTANT, getValue(result_opv));
 
         if (result_op < CSS_N_PROPERTIES) {
-            css_error error = prop_dispatch[result_op].cascade(
-                result_opv, &rs, state);
+            css_error error = css__cascade_property(result_opv, &rs, state);
             if (error != CSS_OK)
                 return error;
         }

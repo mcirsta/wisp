@@ -1,0 +1,79 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Logical inline edges and direction refresh</title>
+<style>
+body { margin:0; }
+#toggle { display:none; }
+label { display:block; width:100px; height:30px; background:#aaa; }
+.row { position:relative; height:100px; }
+.frame { position:absolute; top:0; width:220px; height:80px; background:#ddd; }
+.actual { left:0; }
+.reference { left:260px; }
+.probe { position:absolute; top:10px; height:20px; background:#246; }
+.probe > i { display:block; width:20px; height:20px; background:#fa0; }
+.actual > .probe {
+    inset-inline:11px 17px;
+    margin-inline:5px 9px;
+    padding-inline:7px 13px;
+}
+.reference > .probe { left:11px; right:17px; margin-left:5px; margin-right:9px; padding-left:7px; padding-right:13px; }
+.rtl { direction:rtl; }
+.rtl .reference > .probe { left:17px; right:11px; margin-left:9px; margin-right:5px; padding-left:13px; padding-right:7px; }
+.variable .probe { --flow:rtl; direction:var(--flow); }
+.cascade .actual > .probe { margin-left:23px; padding-right:19px!important; inset-inline-start:11px!important; right:1px; }
+.cascade .reference > .probe { margin-left:23px; padding-right:19px; }
+.inherit .frame { direction:rtl; padding-left:11px; padding-right:17px; }
+.inherit .probe { direction:ltr; }
+.inherit .actual > .probe { padding-inline:inherit; }
+.inherit .reference > .probe { padding-left:17px; padding-right:11px; }
+.relative .probe { position:relative; width:100px; }
+.relative .actual > .probe { inset-inline-end:auto; }
+.relative .reference > .probe { left:auto; }
+.flex .frame { display:flex; }
+.flex .probe { position:static; flex:none; width:100px; }
+.pseudo .frame::before { content:""; position:absolute; top:10px; height:20px; background:#246; }
+.pseudo .actual::before { inset-inline:11px 17px; margin-inline:5px 9px; padding-inline:7px 13px; }
+.pseudo .reference::before { left:17px; right:11px; margin-left:9px; margin-right:5px; padding-left:13px; padding-right:7px; }
+/* Native checked-state refresh changes inherited direction. The declarations
+   on the actual child stay identical, including when its partial style is reused. */
+#toggle:checked ~ .dynamic { direction:rtl; }
+#toggle:checked ~ .dynamic .reference > .probe { left:17px; right:11px; margin-left:9px; margin-right:5px; padding-left:13px; padding-right:7px; }
+</style>
+<!-- Each left-hand sample has an equivalent physical-edge reference on the
+     right, derived from CSS Logical 1. Solid boxes avoid font-metric baselines. -->
+<input id="toggle" type="checkbox"><label for="toggle"></label>
+<div class="row">
+  <div class="frame actual"><div id="ltr" class="probe"><i></i></div></div>
+  <div class="frame reference"><div id="ltr-ref" class="probe"><i></i></div></div>
+</div>
+<div class="row rtl">
+  <div class="frame actual"><div id="rtl" class="probe"><i></i></div></div>
+  <div class="frame reference"><div id="rtl-ref" class="probe"><i></i></div></div>
+</div>
+<div class="row rtl variable">
+  <div class="frame actual" style="direction:ltr"><div id="variable" class="probe"><i></i></div></div>
+  <div class="frame reference" style="direction:ltr"><div id="variable-ref" class="probe"><i></i></div></div>
+</div>
+<div class="row rtl cascade">
+  <div class="frame actual"><div id="cascade" class="probe"><i></i></div></div>
+  <div class="frame reference"><div id="cascade-ref" class="probe"><i></i></div></div>
+</div>
+<div class="row inherit">
+  <div class="frame actual"><div id="inherit" class="probe"><i></i></div></div>
+  <div class="frame reference"><div id="inherit-ref" class="probe"><i></i></div></div>
+</div>
+<div class="row rtl relative">
+  <div class="frame actual"><div id="relative" class="probe"><i></i></div></div>
+  <div class="frame reference"><div id="relative-ref" class="probe"><i></i></div></div>
+</div>
+<div class="row rtl flex">
+  <div class="frame actual"><div id="flex" class="probe"><i></i></div></div>
+  <div class="frame reference"><div id="flex-ref" class="probe"><i></i></div></div>
+</div>
+<div class="row rtl pseudo">
+  <div id="pseudo" class="frame actual"></div><div id="pseudo-ref" class="frame reference"></div>
+</div>
+<div class="row dynamic">
+  <div class="frame actual"><div id="dynamic" class="probe"><i></i></div></div>
+  <div class="frame reference"><div id="dynamic-ref" class="probe"><i></i></div></div>
+</div>

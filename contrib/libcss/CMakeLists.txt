@@ -253,6 +253,7 @@ add_library(css ${WISP_LIB_TYPE}
 	${LIBCSS_CASCADE_GENERATED}
 	src/select/arena.c
 	src/select/calc.c
+	src/select/logical.c
 	src/select/computed.c
 	src/select/background.c
 	src/select/computed_manual.c

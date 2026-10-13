@@ -40,6 +40,11 @@ static inline enum flag_value get_css_flag_value(css_language *c, const css_toke
     return FLAG_VALUE__NONE;
 }
 
+/* Parse a logical inline edge using its physical grammar, retaining mapping
+ * identity in the OPV until the inherited direction is known. */
+css_error css__parse_inline_side(css_language *c, const parserutils_vector *vector, int32_t *ctx,
+    css_style *result, enum css_properties_e op);
+
 /* CSS Lists <counter-name>: a custom identifier other than none. */
 bool css__is_counter_name(const css_token *token);
 
