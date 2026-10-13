@@ -39,6 +39,10 @@ enum css_properties_e {
  * Deferred var() resolution, for longhands and shorthands.
  * Bytecode layout: [OPV] [prop_name_string_idx] [value_id]
  * Both opcodes own their declaration tokens through the stylesheet.
+ * The OPV value is normally zero (all parsed longhands). Edited declaration
+ * stores may set it to a native property opcode + 1 to retain only that member
+ * of a pending shorthand; FLAG_LOGICAL_INLINE distinguishes logical inline
+ * members sharing a physical opcode. This does not change the operand count.
  */
 #define CSS_PROP_VAR_DEFERRED (CSS_N_PROPERTIES + 1)
 

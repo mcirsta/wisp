@@ -171,9 +171,14 @@ static inline bool css__arena_style_is_equal(struct css_computed_style *a, struc
                 return false;
             }
         } else {
-            if (memcmp(a->transform_functions, b->transform_functions,
-                    a->transform_count * sizeof(css_transform_function)) != 0) {
-                return false;
+            for (uint32_t i = 0; i < a->transform_count; i++) {
+                const css_transform_function *x = &a->transform_functions[i];
+                const css_transform_function *y = &b->transform_functions[i];
+                /* Struct padding is not a transform value. Parser/copy paths
+                 * need not give otherwise identical functions equal padding. */
+                if (x->type != y->type || x->value1 != y->value1 || x->unit1 != y->unit1 ||
+                    x->value2 != y->value2 || x->unit2 != y->unit2)
+                    return false;
             }
         }
     }

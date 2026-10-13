@@ -240,3 +240,19 @@ property's integer rounding and range rules. Cover finite/non-finite results,
 negative order/z-index, positive column counts and fractional flex factors.
 Keep this outside the finite inline-style binding checklist: preserving an
 accepted declaration must neither erase it nor invent new rendering support.
+
+## EOF recovery in declaration-list parsing
+
+Confirmed during owned-declaration compilation tests on 2026-10-13: parsing the
+inline declaration list `width:var(--missing,calc(1em + 2px` drops the declaration,
+while its explicitly closed equivalent is accepted. The ordinary declaration-list
+parser reaches `parseVariableDeclaration` with unfinished function nesting, which
+it rejects. This path is unchanged by the new compiler. The newer single-property
+assignment parser already supplies recovered closing tokens; compiling those
+owned tokens passes the new selection regression.
+
+[CSS Syntax's consume-a-function algorithm](https://www.w3.org/TR/css-syntax-3/#consume-function)
+returns the function at EOF. Follow up in the shared declaration/stylesheet
+component parser, with nested functions/blocks, malformed tokens and chunked input
+coverage; do not paper over it in CSSOM serialization or the compiler. Keep this
+existing parser recovery gap separate from the finite live-style binding work.

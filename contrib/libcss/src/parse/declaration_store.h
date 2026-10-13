@@ -56,4 +56,12 @@ css_error
 css__declaration_store_priority(const css_declaration_store *store, const char *name, size_t length, bool *important);
 css_error css__declaration_store_serialize(const css_declaration_store *store, lwc_string **out);
 
+/* Compile the owned contributions directly into an independent inline sheet.
+ * Retains pending shorthand members that CSSOM cssText cannot round-trip.
+ * The source store is unchanged on success/failure and may be destroyed after
+ * success; the caller owns *out. All URL/grammar callbacks come from params.
+ * Source system-font values and parse-time quirks semantics remain preserved. */
+css_error css__declaration_store_compile(
+    const css_declaration_store *store, const css_stylesheet_params *params, css_stylesheet **out);
+
 #endif

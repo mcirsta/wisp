@@ -123,12 +123,6 @@ typedef struct css_select_state {
     prop_state inline_props[CSS_INLINE_EDGE_COUNT][CSS_PSEUDO_ELEMENT_COUNT];
 } css_select_state;
 
-static inline void advance_bytecode(css_style *style, uint32_t n_bytes)
-{
-    style->used -= (n_bytes / sizeof(css_code_t));
-    style->bytecode = style->bytecode + (n_bytes / sizeof(css_code_t));
-}
-
 css_error css__cascade_property(css_code_t opv, css_style *style, css_select_state *state);
 
 bool css__outranks_existing(uint16_t op, bool important, css_select_state *state, enum flag_value explicit_default);

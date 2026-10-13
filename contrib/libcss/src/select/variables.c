@@ -746,7 +746,7 @@ lwc_string *css__variables_ctx_get(const css_var_context *ctx, lwc_string *name)
 }
 static css_error css__cascade_resolved_style(
     css_style *result_style,
-    bool important,
+    css_code_t deferred_opv,
     css_select_state *state)
 {
     css_style rs = *result_style;
@@ -758,7 +758,15 @@ static css_error css__cascade_resolved_style(
         advance_bytecode(&rs, sizeof(result_opv));
         result_op = getOpcode(result_opv);
 
-        if (important)
+        /* An edited pending shorthand can retain only one of its members.
+         * Still parse/validate the whole substituted shorthand before filtering. */
+        if (getValue(deferred_opv) != 0 &&
+            (result_op != getValue(deferred_opv) - 1 ||
+                ((getFlags(result_opv) ^ getFlags(deferred_opv)) & FLAG_LOGICAL_INLINE) != 0)) {
+            css__stylesheet_style_skip(&rs, result_opv);
+            continue;
+        }
+        if (isImportant(deferred_opv))
             result_opv = buildOPV(result_op,
                 getFlags(result_opv) | FLAG_IMPORTANT, getValue(result_opv));
 
@@ -775,7 +783,7 @@ static css_error css__cascade_resolved_style(
 static css_error css__cascade_unset_property(
     const struct css_prop_entry *entry,
     css_stylesheet *sheet,
-    bool important,
+    css_code_t deferred_opv,
     css_select_state *state)
 {
     css_error error;
@@ -838,7 +846,7 @@ static css_error css__cascade_unset_property(
 
     error = entry->handler(&resolve_lang, tokens, &token_ctx, result_style);
     if (error == CSS_OK)
-        error = css__cascade_resolved_style(result_style, important, state);
+        error = css__cascade_resolved_style(result_style, deferred_opv, state);
 
 cleanup:
     if (result_style != NULL)
@@ -852,7 +860,7 @@ cleanup:
 }
 
 css_error css__resolve_var_property(lwc_string *prop_name, uint32_t value_id,
-    css_var_context *ctx, css_stylesheet *sheet, bool important, css_select_state *state)
+    css_var_context *ctx, css_stylesheet *sheet, css_code_t opv, css_select_state *state)
 {
     css_var_value *value = css__stylesheet_var_value_get(sheet, value_id);
     const struct css_prop_entry *entry = css_prop_lookup(lwc_string_data(prop_name), lwc_string_length(prop_name));
@@ -892,12 +900,12 @@ css_error css__resolve_var_property(lwc_string *prop_name, uint32_t value_id,
         error = CSS_INVALID; /* A valid prefix cannot hide trailing junk. */
         goto cleanup;
     }
-    error = css__cascade_resolved_style(style, important, state);
+    error = css__cascade_resolved_style(style, opv, state);
 cleanup:
     if (style != NULL)
         css__stylesheet_style_destroy(style);
     value_unref(expanded);
     if (error == CSS_INVALID)
-        error = css__cascade_unset_property(entry, sheet, important, state);
+        error = css__cascade_unset_property(entry, sheet, opv, state);
     return error;
 }

@@ -1072,6 +1072,44 @@ END_TEST
 #ifdef WISP_TEST_ALLOC_FAILURE
 static void (*const allocators[])(unsigned) = {malloc_limit, calloc_limit, realloc_limit};
 
+START_TEST(test_compile_allocation_failure)
+{
+    css_declaration_store *store = create("--m:3px 5px;margin:var(--m)!important;"
+        "padding:calc(1em + 2px);font:italic 12px/2 serif;"
+        "background:linear-gradient(red,blue) no-repeat,url(tile.png) repeat-x", false);
+    ck_assert(set(store, "margin-left:7px", false));
+    const css_declaration_contribution *old = css__declaration_store_get(store, 0);
+    size_t baseline = 0;
+    lwc_iterate_strings(count_string, &baseline);
+    bool succeeded = false;
+    for (unsigned n = 0; n < 2048; n++) {
+        css_stylesheet *compiled = (void *)1;
+        allocators[_i](n);
+        css_error error = css__declaration_store_compile(store, &input_params, &compiled);
+        allocators[_i](UINT_MAX);
+        ck_assert_ptr_eq(old, css__declaration_store_get(store, 0));
+        if (error == CSS_OK) {
+            ck_assert_uint_gt(n, 0);
+            css_stylesheet_destroy(compiled);
+            succeeded = true;
+        } else {
+            ck_assert_msg(error == CSS_NOMEM, "compile allocator %d failure %u: %d", _i, n, error);
+            ck_assert_ptr_null(compiled);
+        }
+        size_t retained = 0;
+        lwc_iterate_strings(count_string, &retained);
+        ck_assert_msg(retained == baseline, "compile allocator %d failure %u retained %zu strings, originally %zu",
+            _i, n, retained, baseline);
+        if (succeeded)
+            break;
+    }
+    ck_assert(succeeded);
+    check_value(store, "margin-left", "7px", false);
+    check_value(store, "margin-top", "", true);
+    css__declaration_store_destroy(store);
+}
+END_TEST
+
 START_TEST(test_input_allocation_failure)
 {
     css_declaration_store *store = create("--x:old!important;color:red", false);
@@ -1229,6 +1267,7 @@ int main(void)
     tcase_add_test(tc, test_bad_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
     tcase_add_loop_test(tc, test_create_allocation_failure, 0, 3);
+    tcase_add_loop_test(tc, test_compile_allocation_failure, 0, 3);
     tcase_add_loop_test(tc, test_set_allocation_failure, 0, 3);
     tcase_add_loop_test(tc, test_input_allocation_failure, 0, 6);
 #endif

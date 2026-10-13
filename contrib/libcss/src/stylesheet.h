@@ -38,6 +38,15 @@ typedef struct css_style {
     struct css_stylesheet *sheet; /**< containing sheet */
 } css_style;
 
+static inline void advance_bytecode(css_style *style, uint32_t n_bytes)
+{
+    style->used -= (n_bytes / sizeof(css_code_t));
+    style->bytecode = style->bytecode + (n_bytes / sizeof(css_code_t));
+}
+
+/* Skip the operands of an OPV already consumed from trusted parser output. */
+void css__stylesheet_style_skip(css_style *style, css_code_t opv);
+
 typedef enum css_selector_type {
     CSS_SELECTOR_ELEMENT,
     CSS_SELECTOR_CLASS,

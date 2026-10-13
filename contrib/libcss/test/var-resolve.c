@@ -16,7 +16,9 @@
 #include "testutils.h"
 #include "select/select.h"
 #include "select/computed.h"
+#include "select/arena.h"
 #include "stylesheet.h"
+#include "parse/declaration_store.h"
 #include <nsutils/time.h>
 
 typedef struct test_node {
@@ -2684,6 +2686,316 @@ static int benchmark(unsigned elements, unsigned variables)
     return 0;
 }
 
+static const css_stylesheet_params owned_params = {
+    .params_version = CSS_STYLESHEET_PARAMS_VERSION_1,
+    .level = CSS_LEVEL_3,
+    .url = "var_resolve",
+    .resolve = resolve_url,
+};
+
+static css_declaration_store *owned_declarations_with_params(const char *css, const css_stylesheet_params *params)
+{
+    css_declaration_list *list;
+    assert(css__declaration_list_create(params, &list) == CSS_OK);
+    css_error error = css__declaration_list_append(list, (const uint8_t *)css, strlen(css));
+    assert(error == CSS_OK || error == CSS_NEEDDATA);
+    assert(css__declaration_list_complete(list) == CSS_OK);
+    css_declaration_store *store;
+    assert(css__declaration_store_create(list, &store) == CSS_OK);
+    css__declaration_list_destroy(list);
+    return store;
+}
+
+static css_declaration_store *owned_declarations(const char *css)
+{
+    return owned_declarations_with_params(css, &owned_params);
+}
+
+static void owned_edit(css_declaration_store *store, const char *name, const char *value, const char *priority)
+{
+    bool changed;
+    css_error error;
+    if (value == NULL) {
+        error = css__declaration_store_remove(store, name, strlen(name), &changed);
+    } else {
+        css_declaration_assignment edit = {name, value, priority, strlen(name), strlen(value), strlen(priority)};
+        error = css__declaration_store_set_property(store, &owned_params, &edit, &changed);
+    }
+    if (error != CSS_OK || !changed) {
+        fprintf(stderr, "FAIL owned edit %s=%s priority %s: error %d, changed %d\n", name,
+            value != NULL ? value : "remove", priority, error, changed);
+        abort();
+    }
+}
+
+static css_stylesheet *owned_compile(css_declaration_store *store)
+{
+    css_stylesheet *sheet;
+    assert(css__declaration_store_compile(store, &owned_params, &sheet) == CSS_OK);
+    css__declaration_store_destroy(store);
+    return sheet;
+}
+
+/* Pending-substitution longhands serialize empty. Rendering must consume their
+ * original shorthand grammar, retaining only the members still in the store
+ * (CSS Values 5, pending-substitution values; CSSOM, set/remove a declaration). */
+static void test_owned_pending_members(void)
+{
+    static const struct {
+        const char *variables;
+        int vertical, horizontal;
+    } cases[] = {
+        {"--m:3px 5px", 3, 5},
+        {"--m:3px invalid", 0, 0},
+        {"--m:3px 5px 7px 9px 11px", 0, 0},
+        {"", 0, 0},
+        {"--m:var(--n);--n:var(--m)", 0, 0},
+        {"--n:8px 6px;--m:var(--n)", 8, 6},
+    };
+    for (unsigned important = 0; important < 2; important++) {
+        for (unsigned remove = 0; remove < 2; remove++) {
+            css_declaration_store *store = owned_declarations(
+                important ? "margin:var(--m)!important" : "margin:var(--m)");
+            owned_edit(store, "margin-left", remove ? NULL : "7px", "");
+            css_stylesheet *compiled = owned_compile(store);
+            /* Reuse the same independent sheet under distinct variable scopes.
+             * Neither the source list nor the edited store exists any longer. */
+            for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+                style_case ctx;
+                char css[256], label[256];
+                snprintf(css, sizeof(css), "div {margin:31px;%s}", cases[i].variables);
+                snprintf(label, sizeof(label), "owned margin case %zu, important %u, remove %u", i, important, remove);
+                setup_style_case(&ctx, css);
+                const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, compiled, &ctx.results);
+                expect_length_px(label, style, css_computed_margin_top, CSS_MARGIN_SET, cases[i].vertical);
+                expect_length_px(label, style, css_computed_margin_bottom, CSS_MARGIN_SET, cases[i].vertical);
+                expect_length_px(label, style, css_computed_margin_right, CSS_MARGIN_SET, cases[i].horizontal);
+                expect_length_px(label, style, css_computed_margin_left, CSS_MARGIN_SET, remove ? 31 : 7);
+                destroy_style_case(&ctx);
+            }
+            css_stylesheet_destroy(compiled);
+        }
+    }
+}
+
+static void test_owned_member_cascade(void)
+{
+    /* User origin is deliberately different from author: revert must roll back
+     * only the surviving shorthand members, never the removed/edited member. */
+    for (unsigned logical = 0; logical < 2; logical++) {
+        for (unsigned inherit = 0; inherit < 2; inherit++) {
+            for (unsigned remove = 0; remove < 2; remove++) {
+                style_case ctx, parent;
+                const css_computed_style *p = select_style_from_css(
+                    "div {direction:rtl;margin-left:17px;margin-right:11px}", &parent);
+                setup_style_case(&ctx, "div {margin:31px;direction:inherit}");
+                css_stylesheet *user = create_stylesheet_from_css("div {margin:23px}", false, false);
+                assert(css_select_ctx_insert_sheet(ctx.select_ctx, user, 0, CSS_ORIGIN_USER, NULL) == CSS_OK);
+                ctx.node.parent = &parent.node;
+                const char *declarations = logical ? "margin-inline:var(--missing,revert)!important"
+                                                   : "margin:var(--missing,revert)!important";
+                css_declaration_store *store = owned_declarations(declarations);
+                if (inherit)
+                    owned_edit(store, logical ? "margin-inline" : "margin", "var(--missing,inherit)", "important");
+                owned_edit(store, logical ? "margin-inline-end" : "margin-left", remove ? NULL : "7px", "");
+                ctx.inline_style = owned_compile(store);
+                const css_computed_style *child = select_style_for_node(
+                    &ctx, &ctx.node, ctx.inline_style, &ctx.results);
+                css_computed_style *composed;
+                assert(css_computed_style_compose(p, child, &unit_ctx, &composed) == CSS_OK);
+                char label[96];
+                snprintf(
+                    label, sizeof(label), "owned cascade logical %u, inherit %u, remove %u", logical, inherit, remove);
+                expect_length_px(label, composed, css_computed_margin_left, CSS_MARGIN_SET, remove ? 31 : 7);
+                expect_length_px(label, composed, css_computed_margin_right, CSS_MARGIN_SET, inherit ? 11 : 23);
+                css_computed_style_destroy(composed);
+                destroy_style_case(&ctx);
+                css_stylesheet_destroy(user);
+                destroy_style_case(&parent);
+            }
+        }
+    }
+}
+
+static void test_owned_compiled_values(void)
+{
+    /* Independent explicit reference declarations exercise native operand
+     * ownership/traversal, including counted lists and string-table operands. */
+    static const struct {
+        const char *source, *name, *value, *reference;
+    } cases[] = {
+        {"", NULL, NULL, ""},
+        {"--m:3px 5px;margin:var(--m)", "opacity", ".5", "margin:3px 5px;opacity:.5"},
+        {"--m:3px 5px;margin:var(--m)", "margin-left", "7px", "margin:3px 5px 3px 7px"},
+        {"margin:calc(1em + 2px) 3px!important", "margin-left", "7px",
+            "margin-top:calc(1em + 2px)!important;margin-bottom:calc(1em + 2px)!important;"
+            "margin-right:3px!important;margin-left:7px"},
+        {"margin-inline:1px 2px;margin-left:9px;direction:rtl", "margin-inline-end", "4px",
+            "direction:rtl;margin-inline-start:1px;margin-left:9px;margin-inline-end:4px"},
+        {"padding:var(--p);--p:calc(1em + 2px) 3px", "padding-bottom", NULL,
+            "padding-top:calc(1em + 2px);padding-left:3px;padding-right:3px"},
+        {"border:var(--b);--b:3px solid red", "border-left-color", "blue",
+            "border:3px solid red;border-left-color:blue"},
+        {"border:3px solid red", "border-left-color", NULL,
+            "border-top:3px solid red;border-right:3px solid red;border-bottom:3px solid red;"
+            "border-left-width:3px;border-left-style:solid"},
+        {"background:linear-gradient(red,blue) left top/10px 20px no-repeat,"
+         "url(tile.png) 2px 3px repeat-x",
+            "background-repeat-y", "repeat",
+            "background:linear-gradient(red,blue) left top/10px 20px no-repeat,"
+            "url(tile.png) 2px 3px repeat-x;background-repeat-y:repeat"},
+        {"--b:linear-gradient(red,blue) 2px 3px no-repeat,url(tile.png) 4px 5px repeat-x;"
+         "background:var(--b)",
+            "background-position-y", "7px",
+            "background:linear-gradient(red,blue) 2px 3px no-repeat,url(tile.png) 4px 5px repeat-x;"
+            "background-position-y:7px"},
+        {"font:italic small-caps bold 12px/2 serif", "font-size", "15px", "font:italic small-caps bold 15px/2 serif"},
+        {"font:var(--f)!important;--f:italic small-caps bold 12px/2 serif", "font-size", "15px",
+            "font-style:italic!important;font-variant-caps:small-caps!important;font-weight:bold!important;"
+            "line-height:2!important;font-family:serif!important;font-size:15px"},
+        {"white-space:var(--s);--s:pre-wrap", "text-wrap-mode", "nowrap", "white-space:pre"},
+        {"list-style:inside square url(marker.png)", "list-style-position", "outside",
+            "list-style:outside square url(marker.png)"},
+        {"grid-row:var(--line);--line:2/span 3", "grid-row-end", "5", "grid-row:2/5"},
+        {"\\2d -X:7px;--x:9px;width:var(--X);height:var(--x)", NULL, NULL, "width:7px;height:9px"},
+        {"", "width", "var(--missing,calc(1em + 2px", "width:var(--missing,calc(1em + 2px))"},
+        {"transform:translate(3px,5px) rotate(10deg);content:'owned' url(label.png);"
+         "cursor:url(pointer.png),auto;grid-template-columns:2fr 3px;"
+         "clip:rect(1px,auto,3px,4px);quotes:'[' ']'",
+            NULL, NULL,
+            "transform:translate(3px,5px) rotate(10deg);content:'owned' url(label.png);"
+            "cursor:url(pointer.png),auto;grid-template-columns:2fr 3px;"
+            "clip:rect(1px,auto,3px,4px);quotes:'[' ']'"},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        css_declaration_store *store = owned_declarations(cases[i].source);
+        if (cases[i].name != NULL)
+            owned_edit(store, cases[i].name, cases[i].value, "");
+        style_case actual, reference;
+        setup_style_case(&actual, "");
+        setup_style_case(&reference, "");
+        actual.inline_style = owned_compile(store);
+        reference.inline_style = create_stylesheet_from_css(cases[i].reference, true, false);
+        const css_computed_style *a = select_style_for_node(
+            &actual, &actual.node, actual.inline_style, &actual.results);
+        const css_computed_style *b = select_style_for_node(
+            &reference, &reference.node, reference.inline_style, &reference.results);
+        /* Computed styles are interned by value, including owned lists. */
+        if (a != b) {
+            fprintf(stderr, "FAIL owned compilation case %zu: %s; edit %s=%s; expected %s\n", i, cases[i].source,
+                cases[i].name != NULL ? cases[i].name : "none", cases[i].value != NULL ? cases[i].value : "remove",
+                cases[i].reference);
+            abort();
+        }
+        destroy_style_case(&actual);
+        destroy_style_case(&reference);
+    }
+}
+
+static void test_owned_intact_pending_shorthand(void)
+{
+    css_declaration_store *store = owned_declarations("margin:var(--m);font:var(--f);background:var(--b)");
+    owned_edit(store, "opacity", ".5", "");
+    css_stylesheet *sheet = owned_compile(store);
+    css_style cursor = *((css_rule_selector *)sheet->rule_list)->style;
+    unsigned deferred = 0;
+    while (cursor.used != 0) {
+        css_code_t opv = *cursor.bytecode;
+        advance_bytecode(&cursor, sizeof(opv));
+        if (getOpcode(opv) == CSS_PROP_VAR_DEFERRED) {
+            assert(getValue(opv) == 0); /* One full substitution per original shorthand. */
+            deferred++;
+        }
+        css__stylesheet_style_skip(&cursor, opv);
+    }
+    assert(deferred == 3);
+    css_stylesheet_destroy(sheet);
+}
+
+static void test_transform_interning_ignores_padding(void)
+{
+    style_case ctx;
+    const css_computed_style *original = select_style_from_css(
+        "div {transform:translate(3px,5px) rotate(10deg)}", &ctx);
+    css_computed_style *copy, *reference;
+    assert(css__computed_style_clone(original, &copy) == CSS_OK);
+    assert(css__computed_style_clone(original, &reference) == CSS_OK);
+    assert(css__arena_intern_style(&reference) == CSS_OK);
+    assert(copy->transform_count == 2);
+    for (uint32_t i = 0; i < copy->transform_count; i++) {
+        const css_transform_function *source = &original->transform_functions[i];
+        css_transform_function *target = &copy->transform_functions[i];
+        memset(target, 0xa5, sizeof(*target));
+        target->type = source->type;
+        target->value1 = source->value1;
+        target->unit1 = source->unit1;
+        target->value2 = source->value2;
+        target->unit2 = source->unit2;
+    }
+    assert(css__arena_intern_style(&copy) == CSS_OK && copy == reference);
+    css_computed_style_destroy(copy);
+    css_computed_style_destroy(reference);
+    destroy_style_case(&ctx);
+}
+
+static css_error owned_system_font(void *pw, lwc_string *name, css_system_font *font)
+{
+    unsigned *calls = pw;
+    /* The original assignment is the only operation allowed to call us. */
+    assert(++*calls == 1 && strcmp(lwc_string_data(name), "menu") == 0);
+    *font = (css_system_font){.style = CSS_FONT_STYLE_ITALIC,
+        .variant = CSS_FONT_VARIANT_SMALL_CAPS,
+        .weight = CSS_FONT_WEIGHT_BOLD,
+        .size = {INTTOFIX(13), CSS_UNIT_PX},
+        .line_height = {INTTOFIX(20), CSS_UNIT_PX}};
+    assert(lwc_intern_string("Stored Font", 11, &font->family) == lwc_error_ok);
+    return CSS_OK;
+}
+
+static css_error owned_resolve_url(void *pw, const char *base, lwc_string *relative, lwc_string **absolute)
+{
+    (void)pw;
+    char url[256];
+    int length = snprintf(
+        url, sizeof(url), "%s%.*s", base, (int)lwc_string_length(relative), lwc_string_data(relative));
+    assert(length > 0 && (size_t)length < sizeof(url));
+    return lwc_intern_string(url, length, absolute) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+}
+
+static void test_owned_source_context(void)
+{
+    unsigned calls = 0;
+    css_stylesheet_params params = owned_params;
+    params.font = owned_system_font;
+    params.font_pw = &calls;
+    params.allow_quirks = true;
+    params.resolve = owned_resolve_url;
+    params.url = "https://old.example/";
+    css_declaration_store *store = owned_declarations_with_params(
+        "font:menu!important;margin-top:12;background-image:url(icon.png)", &params);
+    assert(calls == 1);
+    owned_edit(store, "font-size", "15px", "");
+    style_case ctx;
+    setup_style_case(&ctx, "");
+    params.allow_quirks = false;
+    params.url = "https://new.example/";
+    assert(css__declaration_store_compile(store, &params, &ctx.inline_style) == CSS_OK);
+    css__declaration_store_destroy(store);
+    assert(calls == 1);
+    const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, ctx.inline_style, &ctx.results);
+    expect_length_px("saved font override", style, css_computed_font_size, CSS_FONT_SIZE_DIMENSION, 15);
+    expect_length_px("saved font line-height", style, css_computed_line_height, CSS_LINE_HEIGHT_DIMENSION, 20);
+    expect_length_px("saved quirks length", style, css_computed_margin_top, CSS_MARGIN_SET, 12);
+    assert(css_computed_font_style(style) == CSS_FONT_STYLE_ITALIC);
+    assert(css_computed_font_weight(style) == CSS_FONT_WEIGHT_BOLD);
+    lwc_string **family, *url;
+    css_computed_font_family(style, &family);
+    assert(family != NULL && strcmp(lwc_string_data(family[0]), "Stored Font") == 0 && family[1] == NULL);
+    assert(css_computed_background_image(style, &url) == CSS_BACKGROUND_IMAGE_IMAGE);
+    assert(strcmp(lwc_string_data(url), "https://new.example/icon.png") == 0);
+    destroy_style_case(&ctx);
+}
+
 static void assert_no_interned_strings(lwc_string *string, void *pw)
 {
     UNUSED(pw);
@@ -2762,6 +3074,12 @@ int main(int argc, char **argv)
     test_gap_aliases();
     test_deferred_revert();
     test_environment_outlives_stylesheet();
+    test_owned_pending_members();
+    test_owned_member_cascade();
+    test_owned_compiled_values();
+    test_owned_source_context();
+    test_owned_intact_pending_shorthand();
+    test_transform_interning_ignores_padding();
 
     lwc_iterate_strings(assert_no_interned_strings, NULL);
     printf("PASS\n");

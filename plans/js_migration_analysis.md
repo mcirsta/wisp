@@ -60,7 +60,7 @@ property ranges are committed as `ed93be8d`; supported font/decoration identitie
 as `908448f1`, independent background repeat axes as `03a81fd7`, and
 background position axes as `090573ab`, and white-space decomposition as
 `6b5f2d7b`. Block inset registrations and shared logical pair parsing are committed
-as `71bfb770`.
+as `71bfb770`; direction-aware inline edges as `43f941de`.
 Earlier dated sections are historical records, not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
@@ -104,6 +104,9 @@ the target. Each group can require more than one tested batch:
   accessors, standard methods, enumeration and CSSOM exception/conversion rules.
 - [ ] DOM synchronization: style-attribute edits in both directions, coalesced
   render invalidation, JS mutation attribution and no-op handling.
+  The native owned-declarations → inline-stylesheet compiler is implemented and
+  tested, including partially edited pending shorthands. Connecting it to DOM
+  ownership/attribute updates remains part of this group.
 - [ ] Integration/lifetime checks: detached trees, adoption, GC, navigation,
   reentrancy and failures; saved-page regression and a fresh live-target check.
 
@@ -2915,6 +2918,57 @@ It passes in Debug, alongside JS innerHTML integration. Both builds are
 warning-free; GTK/Windows were not built. Sanitizers also caught a missing
 dummy-parent cleanup in the new native test, which was corrected before the
 final passing run.
+
+### Compiling owned declarations for DOM synchronization (2026-10-13)
+
+Committed the logical inline-edge batch as `43f941de`. Native edited declarations
+can now compile into an independent inline stylesheet without serializing CSSOM
+text and parsing it again. This implements the retained-declaration selection
+boundary already required by the DOM synchronization checklist; it does not add
+another property family or expose the QuickJS style object yet.
+
+The compiler reuses registered native property handlers and the generated
+longhand membership. Literal shorthand sources are parsed once for adjacent
+members, copying only contributions still present in the store. Deferred sources
+retain the original tokens/grammar; the existing deferred opcode can name one
+surviving longhand without changing its two-operand format. Selection validates
+the entire substituted shorthand before applying that member, including invalid
+substitution, inheritance and origin revert. Removed members do not reset lower
+stylesheet declarations. This follows
+[CSS Values 5 pending-substitution rules](https://drafts.csswg.org/css-values-5/#pending-substitution-value).
+Untouched adjacent pending shorthands remain one instruction, avoiding repeated
+substitution/grammar work after an unrelated API edit. Partially edited shorthands
+currently parse the shared value for each surviving deferred member.
+
+Bytecode operand traversal moved unchanged out of selector collection into a
+shared helper, used by collection, compilation and deferred filtering. No second
+opcode operand table was added. The compiler preserves captured system fonts and
+source quirks, resolves URLs with the supplied compilation context, owns its
+tokens/string tables, and leaves the source store unchanged on failure. The
+compiled sheet can outlive both the original parser list and the edited store.
+
+Native tests cover partial overrides/removals with both priorities; missing,
+cyclic and invalid variables; inherited RTL logical edges; inherit/revert;
+reusing a compiled sheet under different variable environments; complex operand
+lists; empty stores; recovered single-value EOF tokens; source font/quirks and URL
+contexts; and allocation failure at every compiler allocation. Existing
+specified-value cases also compile their owned stores. Equivalent transform
+styles exposed an existing cache comparison of uninitialized struct padding:
+interning now compares the five transform fields, with an explicit padding test.
+
+The old Duktape HTMLElement style getter was checked again: it creates a
+placeholder object and supplies no native ownership or declaration compilation
+to reuse. The next integration still needs the stable QuickJS CSSStyleProperties
+object, authoritative DOM-owned declarations, suppression of reparsing our own
+attribute synchronization, and JS-attributed invalidation/lifetime tests. No
+saved/live eBihoreanul progress is claimed by this native batch.
+
+Validation: all 76 selected native suites and nine Qt rendering suites pass in
+Release and Debug. Native ASan/UBSan/LSan checks are clean; Qt runs use
+ASan/UBSan with leak detection disabled for Qt. Both builds are warning-free.
+GTK and Windows were not built. The declaration-list EOF recovery gap found
+while testing is recorded separately in the correctness backlog; single-value
+API assignments already recover and retain those tokens correctly.
 
 Next is the QuickJS `CSSStyleProperties` object, then the already-listed DOM
 synchronization and lifetime/live-target checks. No new JS API is exposed by

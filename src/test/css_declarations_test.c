@@ -2686,6 +2686,14 @@ START_TEST(test_specified_values)
             css__declaration_list_destroy(roundtrip);
         }
         css__declaration_order_destroy(order);
+        css_declaration_store *store;
+        css_stylesheet *compiled = NULL;
+        ck_assert_int_eq(css__declaration_store_create(list, &store), CSS_OK);
+        error = css__declaration_store_compile(store, &params, &compiled);
+        ck_assert_msg(error == CSS_OK, "compile case %d chunks %u: %s: error %d", _i, chunks,
+            value_cases[_i].css, error);
+        css__declaration_store_destroy(store);
+        css_stylesheet_destroy(compiled);
         css__declaration_list_destroy(list);
         /* The returned string is owned, independent of both borrowed views. */
         if (value != NULL)

@@ -10,6 +10,7 @@
 #include <libcss/errors.h>
 #include <libcss/types.h>
 #include <parserutils/utils/vector.h>
+#include "bytecode/bytecode.h"
 
 /* Owned, immutable tokens: declarations live on a stylesheet; computed values
  * live in finalized environments. Neither contains pointers into lexer input. */
@@ -68,7 +69,7 @@ void css__stylesheet_var_values_destroy(struct css_stylesheet *sheet);
 #define CSS_VAR_MAX_DEPTH 64
 
 css_error css__resolve_var_property(lwc_string *prop_name, uint32_t value_id,
-    css_var_context *ctx, struct css_stylesheet *sheet, bool important,
+    css_var_context *ctx, struct css_stylesheet *sheet, css_code_t opv,
     struct css_select_state *state);
 
 #endif
