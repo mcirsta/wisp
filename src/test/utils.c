@@ -151,6 +151,20 @@ START_TEST(squash_whitespace_test)
 }
 END_TEST
 
+static const struct test_strings preserve_breaks_vec[] = {
+    {"", ""}, {"   ", " "}, {"  a  b  ", " a b "},
+    {" a \t \r\n  b \r c \n\n d ", " a\nb\nc\n\nd "},
+    {"\n \t \n", "\n\n"}, {" a\xc2\xa0  b ", " a\xc2\xa0 b "},
+};
+START_TEST(squash_preserve_breaks_test)
+{
+    char *result = squash_whitespace_preserve_breaks(preserve_breaks_vec[_i].test);
+    ck_assert_ptr_nonnull(result);
+    ck_assert_str_eq(result, preserve_breaks_vec[_i].res);
+    free(result);
+}
+END_TEST
+
 START_TEST(squash_whitespace_api_test)
 {
     char *res_str;
@@ -172,6 +186,7 @@ static TCase *squash_whitespace_case_create(void)
 #endif
 
     tcase_add_loop_test(tc, squash_whitespace_test, 0, NELEMS(squash_whitespace_test_vec));
+    tcase_add_loop_test(tc, squash_preserve_breaks_test, 0, NELEMS(preserve_breaks_vec));
 
     return tc;
 }

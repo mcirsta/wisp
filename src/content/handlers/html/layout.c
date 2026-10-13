@@ -746,8 +746,7 @@ struct inline_wrap_state {
 
 static bool layout_inline_wraps(const struct box *box)
 {
-    enum css_white_space_e ws = css_computed_white_space(box->style);
-    return ws != CSS_WHITE_SPACE_NOWRAP && ws != CSS_WHITE_SPACE_PRE && !box_is_inside_marker(box);
+    return css_computed_text_wrap_mode(box->style) == CSS_TEXT_WRAP_MODE_WRAP && !box_is_inside_marker(box);
 }
 
 static bool layout_inline_atomic(const struct box *box)
@@ -795,8 +794,8 @@ static bool layout_inline_break_before(struct inline_wrap_state *state, const st
     /* A folded space follows its source's white-space policy as well as its
      * font; an adjacent atomic inline may override either inherited value. */
     if (state->content && box->space != 0) {
-        uint8_t ws = css_computed_white_space(box->space_style ? box->space_style : box->style);
-        state->space |= marker ? wrap : ws != CSS_WHITE_SPACE_NOWRAP && ws != CSS_WHITE_SPACE_PRE;
+        uint8_t mode = css_computed_text_wrap_mode(box->space_style ? box->space_style : box->style);
+        state->space |= marker ? wrap : mode == CSS_TEXT_WRAP_MODE_WRAP;
     }
     return boundary;
 }
@@ -834,8 +833,7 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
     assert(first->parent->parent->style);
 
     block = first->parent->parent;
-    no_wrap = (css_computed_white_space(block->style) == CSS_WHITE_SPACE_NOWRAP ||
-        css_computed_white_space(block->style) == CSS_WHITE_SPACE_PRE);
+    no_wrap = css_computed_text_wrap_mode(block->style) == CSS_TEXT_WRAP_MODE_NOWRAP;
 
     *line_has_height = false;
 
@@ -4548,14 +4546,8 @@ static bool layout_inline_container(
 
         box_rejoin_text(c);
 
-        if (c->style) {
-            enum css_white_space_e whitespace;
-
-            whitespace = css_computed_white_space(c->style);
-
-            is_pre = (whitespace == CSS_WHITE_SPACE_PRE || whitespace == CSS_WHITE_SPACE_PRE_LINE ||
-                whitespace == CSS_WHITE_SPACE_PRE_WRAP);
-        }
+        if (c->style)
+            is_pre = css_computed_white_space_collapse(c->style) != CSS_WHITE_SPACE_COLLAPSE_COLLAPSE;
 
         if ((lh__box_is_object(c) == false && c->text && (c->length || is_pre)) || c->type == BOX_BR)
             has_text_children = true;

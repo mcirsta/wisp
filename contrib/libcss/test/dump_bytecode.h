@@ -309,12 +309,15 @@ static const char *const dump_keywords_content_visibility[] = {
     [CONTENT_VISIBILITY_HIDDEN] = "hidden",
 };
 
-static const char *const dump_keywords_white_space[] = {
-    [WHITE_SPACE_NORMAL] = "normal",
-    [WHITE_SPACE_PRE] = "pre",
-    [WHITE_SPACE_NOWRAP] = "nowrap",
-    [WHITE_SPACE_PRE_WRAP] = "pre-wrap",
-    [WHITE_SPACE_PRE_LINE] = "pre-line",
+static const char *const dump_keywords_white_space_collapse[] = {
+    [WHITE_SPACE_COLLAPSE_COLLAPSE] = "collapse",
+    [WHITE_SPACE_COLLAPSE_PRESERVE] = "preserve",
+    [WHITE_SPACE_COLLAPSE_PRESERVE_BREAKS] = "preserve-breaks",
+};
+
+static const char *const dump_keywords_text_wrap_mode[] = {
+    [TEXT_WRAP_MODE_WRAP] = "wrap",
+    [TEXT_WRAP_MODE_NOWRAP] = "nowrap",
 };
 
 static const char *const dump_keywords_writing_mode[] = {
@@ -1572,7 +1575,8 @@ static const struct dump_bytecode_property dump_bytecode_properties[CSS_N_PROPER
     [CSS_PROP_CONTENT_VISIBILITY] = KEYWORDS(content_visibility),
     [CSS_PROP_VOICE_FAMILY] = READER(voice_family),
     [CSS_PROP_VOLUME] = READER(volume),
-    [CSS_PROP_WHITE_SPACE] = KEYWORDS(white_space),
+    [CSS_PROP_WHITE_SPACE_COLLAPSE] = KEYWORDS(white_space_collapse),
+    [CSS_PROP_TEXT_WRAP_MODE] = KEYWORDS(text_wrap_mode),
     [CSS_PROP_WRITING_MODE] = KEYWORDS(writing_mode),
     [CSS_PROP_Z_INDEX] = READER(z_index),
 };

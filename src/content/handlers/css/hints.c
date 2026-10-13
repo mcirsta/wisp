@@ -1268,8 +1268,11 @@ static void css_hint_white_space_nowrap(nscss_select_ctx *ctx, dom_node *node)
 
     err = dom_element_has_attribute(node, corestring_dom_nowrap, &nowrap);
     if (err == DOM_NO_ERR && nowrap == true) {
-        hint->prop = CSS_PROP_WHITE_SPACE;
-        hint->status = CSS_WHITE_SPACE_NOWRAP;
+        hint->prop = CSS_PROP_WHITE_SPACE_COLLAPSE;
+        hint->status = CSS_WHITE_SPACE_COLLAPSE_COLLAPSE;
+        css_hint_advance(&hint);
+        hint->prop = CSS_PROP_TEXT_WRAP_MODE;
+        hint->status = CSS_TEXT_WRAP_MODE_NOWRAP;
         css_hint_advance(&hint);
     }
 }

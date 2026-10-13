@@ -47,10 +47,10 @@ static char *search_text(dom_node *node, const css_computed_style *style, bool i
                                     : dom_characterdata_get_data(node, &data);
     if (error != DOM_NO_ERR || data == NULL)
         return NULL;
-    uint8_t space = css_computed_white_space(style);
-    char *text = space == CSS_WHITE_SPACE_NORMAL || space == CSS_WHITE_SPACE_NOWRAP
-        ? squash_whitespace(dom_string_data(data))
-        : strdup(dom_string_data(data));
+    uint8_t collapse = css_computed_white_space_collapse(style);
+    char *text = collapse == CSS_WHITE_SPACE_COLLAPSE_COLLAPSE ? squash_whitespace(dom_string_data(data)) :
+        collapse == CSS_WHITE_SPACE_COLLAPSE_PRESERVE_BREAKS ? squash_whitespace_preserve_breaks(dom_string_data(data)) :
+        strdup(dom_string_data(data));
     dom_string_unref(data);
     if (text != NULL) {
         for (char *p = text; *p != 0; p++) {

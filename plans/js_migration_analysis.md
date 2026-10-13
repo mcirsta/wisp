@@ -57,7 +57,8 @@ extended HSL/HWB readback as `ed777a47`, and resolved system-font readback as
 math readback/edit preservation as `facb2b04`, and native calculation precision
 as `840e2aea`. Non-finite calculations, shared simplification and generated
 property ranges are committed as `ed93be8d`; supported font/decoration identities
-as `908448f1`, and independent background repeat axes as `03a81fd7`.
+as `908448f1`, independent background repeat axes as `03a81fd7`, and
+background position axes as `090573ab`.
 Earlier dated sections are historical records, not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
@@ -82,8 +83,9 @@ the target. Each group can require more than one tested batch:
   `font-variant` and `text-decoration` now decompose into their supported
   `font-variant-caps` and `text-decoration-line` longhands, sharing native
   parsing/cascade storage. Background repeat and position axes now have independent
-  native lists, cascade and declaration edits. White-space decomposition and
-  logical start/end identities remain. Full new font/decoration grammars are
+  native lists, cascade and declaration edits. White-space now decomposes into
+  independent collapse/wrapping longhands. Logical start/end identities remain.
+  Full new font/decoration grammars are
   not prerequisites for this target.
   Pending-substitution preservation has native edit coverage. Correction to
   the earlier note: empty pending longhand readback is **required** by CSS
@@ -103,7 +105,7 @@ the target. Each group can require more than one tested batch:
 The earlier estimate of roughly 8–15 focused batches is a planning estimate,
 not a delivery guarantee. Property-family registrations are a coverage aid,
 not a percentage-complete measure: families can still have unsupported value
-forms. All 191 property registrations now have a family; this closes the
+forms. All 193 property registrations now have a family; this closes the
 unregistered-family work, not the remaining value forms or live binding.
 Update this list as groups finish. Keep
 optional rendering discoveries in `src/docs/layout-correctness.md` unless they
@@ -2745,6 +2747,65 @@ are warning-free. Tests cover whole/chunked readback, unequal lists, edits and
 removal ownership, priority/variable precedence, independent origin revert,
 font-relative inheritance after source destruction, tail-aware style sharing,
 operand walking and percentage positioning. GTK/Windows were not built.
+
+### Independent white-space collapse and wrapping (2026-10-13)
+
+Committed the background-position batch as `090573ab`. `white-space` now
+expands into the supported `white-space-collapse` and `text-wrap-mode`
+longhands. The former supports `collapse`, `preserve` and `preserve-breaks`;
+the latter supports `wrap` and `nowrap`. The existing normal/pre/nowrap/
+pre-wrap/pre-line spellings remain accepted, with the corresponding modern
+one-/two-component forms in either order. The sixth combination,
+`preserve-breaks nowrap`, preserves newlines while suppressing soft wrapping.
+This follows [CSS Text 4 white-space decomposition](https://drafts.csswg.org/css-text-4/#white-space-property)
+and its [processing rules](https://drafts.csswg.org/css-text-4/#white-space-rules).
+
+Both inherited longhands have independent native cascade, priorities, variable
+substitution, invalid-at-computed-value handling, origin revert and composition.
+The old combined computed enum/getter is removed; construction/search read
+collapse policy, while line layout reads wrap mode. HTML nowrap hints set both
+components. TOML generates the new keyword handlers, storage and cascade; a
+shared shorthand grammar serves native parsing and specified readback. The
+single-keyword forms are preferred when they represent the full pair. Editing
+or removing one component retains the other, including original pending sources.
+This adds one packed storage bit, no per-style heap allocation or rendering
+thread. Unrelated opcode numbers are retained; custom/deferred sentinels shift.
+
+The review found an existing `pre-line` defect: it used the preserving text path
+and retained repeated spaces. Construction and search now share normalization
+that collapses spaces/tabs, preserves normalized segment breaks, and removes
+spaces around those breaks. Text-box creation is split into container/run helpers
+shared by collapsed and preserved text. This removes duplicated construction
+code and its per-text-node diagnostic DOM lookups. Empty collapsed text creates
+no line; a preserved newline still creates a line. Save-as-text recognizes
+preserved breaks independently of wrapping.
+
+Scope remains the currently supported whitespace behaviors. `white-space-trim`,
+`break-spaces`, `preserve-spaces`, balanced/pretty wrapping and tab-stop layout
+are not added. Preserved tabs retain the earlier one-space approximation. This
+is not a claim of full CSS Text conformance, and those wider features do not
+expand the current inline-style checklist. Live `element.style` is still pending.
+The remaining aggregate-identity group is logical start/end properties.
+
+Validation covers specified readback, declaration-block round trips, partial
+edits/removals, pending-source ownership, literal/deferred cascade, independent
+inheritance/revert, invalid grammar and shared whitespace normalization. The
+native shorthand rollback test exercises failure while appending either opcode.
+All 90 selected native suites pass across Release/Debug (the previous 87 plus
+utils and two construction suites). The first runs exposed stale !important
+sentinel fixtures and mock styles missing explicit wrap/collapse initial values;
+those are corrected, with the affected layout suites rerun and native sanitizer
+checks clean. Both builds are warning-free. The existing grid-construction test
+keeps its pre-existing leak-check exclusion.
+
+Eleven Release and fourteen Debug Qt suites pass, including ten new geometry/
+pixel comparisons, text fitting, inline spacing, generated/special-content search,
+retained restyling and DOM/innerHTML/local-script integration. The references
+encode the same CSS rules with established keywords or explicit breaks; they
+are not Chromium snapshots. The cross-node case uses matching text-run boundaries
+to avoid unrelated fractional glyph-rasterization differences. GTK/Windows were
+not built. Duktape's previously reviewed placeholder style getter supplies no
+additional implementation to reuse for this declaration-layer work.
 
 ## Assessment
 

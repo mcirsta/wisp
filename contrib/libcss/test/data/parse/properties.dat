@@ -4140,7 +4140,7 @@ p:before { content: open-quote url('http://picodrive.acornarcade.com/') " : " at
 #errors
 #expected
 | 1 *
-|   0x0000005e
+|   0x0000005e 0x00000090
 #reset
 
 #data
@@ -4148,7 +4148,7 @@ p:before { content: open-quote url('http://picodrive.acornarcade.com/') " : " at
 #errors
 #expected
 | 1 *
-|   0x0004005e
+|   0x0004005e 0x00040090
 #reset
 
 #data
@@ -4156,7 +4156,7 @@ p:before { content: open-quote url('http://picodrive.acornarcade.com/') " : " at
 #errors
 #expected
 | 1 *
-|   0x0008005e
+|   0x0000005e 0x00040090
 #reset
 
 #data
@@ -4164,7 +4164,7 @@ p:before { content: open-quote url('http://picodrive.acornarcade.com/') " : " at
 #errors
 #expected
 | 1 *
-|   0x000c005e
+|   0x0004005e 0x00000090
 #reset
 
 #data
@@ -4172,7 +4172,7 @@ p:before { content: open-quote url('http://picodrive.acornarcade.com/') " : " at
 #errors
 #expected
 | 1 *
-|   0x0010005e
+|   0x0008005e 0x00000090
 #reset
 
 ##

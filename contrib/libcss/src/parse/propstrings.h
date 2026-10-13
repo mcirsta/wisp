@@ -298,6 +298,8 @@ enum {
     PRE,
     NOWRAP,
     PRE_WRAP,
+    PRESERVE,
+    PRESERVE_BREAKS,
     PRE_LINE,
     LEFTWARDS,
     RIGHTWARDS,

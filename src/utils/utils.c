@@ -59,6 +59,36 @@ char *squash_whitespace(const char *s)
 }
 
 
+/* exported interface documented in utils/string.h */
+char *squash_whitespace_preserve_breaks(const char *s)
+{
+    assert(s != NULL);
+    char *result = malloc(strlen(s) + 1);
+    if (result == NULL)
+        return NULL;
+    size_t used = 0;
+    bool after_break = false;
+    for (size_t i = 0; s[i] != 0; i++) {
+        if (s[i] == '\r' || s[i] == '\n') {
+            if (used != 0 && result[used - 1] == ' ')
+                used--;
+            result[used++] = '\n';
+            if (s[i] == '\r' && s[i + 1] == '\n')
+                i++;
+            after_break = true;
+        } else if (s[i] == ' ' || s[i] == '\t') {
+            if (!after_break && (used == 0 || result[used - 1] != ' '))
+                result[used++] = ' ';
+        } else {
+            result[used++] = s[i];
+            after_break = false;
+        }
+    }
+    result[used] = 0;
+    return result;
+}
+
+
 /* exported interface documented in utils/utils.h */
 char *cnv_space2nbsp(const char *s)
 {

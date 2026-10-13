@@ -108,7 +108,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10px
 word-spacing: normal
 writing-mode: horizontal-tb

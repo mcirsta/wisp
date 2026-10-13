@@ -15,6 +15,7 @@
 #include "parse/declaration_text.h"
 #include "parse/property.h"
 #include "parse/transform.h"
+#include "parse/white_space.h"
 #include "parse/properties/utils.h"
 #include "utils/css_utils.h"
 
@@ -434,6 +435,26 @@ static bool scalar_component(const css_declaration_contribution *value, size_t a
     return true;
 }
 
+static css_error serialize_white_space_component(const css_declaration_contribution *value, lwc_string **out)
+{
+    lwc_string *parts[2];
+    size_t count = 0;
+    const css_declaration *source = value->source;
+    for (size_t i = 0; i < source->token_count; i++) {
+        const css_declaration_token *token = &source->tokens[i];
+        if (token->type == CSS_TOKEN_S)
+            continue;
+        if (count == 2 || token->type != CSS_TOKEN_IDENT)
+            return CSS_INVALID;
+        parts[count++] = token->text;
+    }
+    uint16_t values[2];
+    if (value->component >= 2 || !css__white_space_values(parts, count, values))
+        return CSS_INVALID;
+    const char *text = css__white_space_component(value->component, values[value->component]);
+    return intern(text, strlen(text), out);
+}
+
 /* Within the accepted scalar-product calc grammar a dimension/percentage can
  * never cancel its type. This identifies shorthand components without needing
  * to evaluate or serialize unrelated components (including non-finite math). */
@@ -755,6 +776,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
         return serialize_angle(source, out);
     if (kind == CSS_DECL_VALUE_FONT)
         return css__declaration_font_component(value, out);
+    if (kind == CSS_DECL_VALUE_WHITE_SPACE)
+        return serialize_white_space_component(value, out);
     if (kind == CSS_DECL_VALUE_IMAGE_LIST)
         return css__declaration_background_image(source, out);
     if (kind == CSS_DECL_VALUE_BACKGROUND || kind == CSS_DECL_VALUE_REPEAT_LIST ||
@@ -893,6 +916,21 @@ static css_error serialize_components(enum css_declaration_value_kind kind,
             first = 1;
             used = 1;
         }
+    } else if (kind == CSS_DECL_VALUE_WHITE_SPACE) {
+        /* Prefer the established single-keyword forms where they express the
+         * entire pair. The sixth supported combination has no legacy alias. */
+        bool nowrap = css__keyword_equal(values[1], "nowrap");
+        const char *keyword = NULL;
+        if (css__keyword_equal(values[0], "collapse"))
+            keyword = nowrap ? "nowrap" : "normal";
+        else if (css__keyword_equal(values[0], "preserve"))
+            keyword = nowrap ? "pre" : "pre-wrap";
+        else if (!nowrap)
+            keyword = "pre-line";
+        if (keyword != NULL) {
+            error = intern(keyword, strlen(keyword), out);
+            goto done;
+        }
     } else if (kind == CSS_DECL_VALUE_FLEX_FLOW) {
         if (css__keyword_equal(values[1], "nowrap"))
             used = 1;
@@ -971,7 +1009,7 @@ css_error css__declaration_shorthand_serialize(const struct css_prop_entry *prop
     if (kind == CSS_DECL_VALUE_BORDER || kind == CSS_DECL_VALUE_BORDER_SIDE || kind == CSS_DECL_VALUE_OUTLINE)
         return serialize_border_shorthand(kind, members, out);
     if (scalar_arity(kind) == 1 && kind != CSS_DECL_VALUE_FLEX && kind != CSS_DECL_VALUE_FLEX_FLOW &&
-        kind != CSS_DECL_VALUE_LIST_STYLE && kind != CSS_DECL_VALUE_COLUMNS &&
+        kind != CSS_DECL_VALUE_LIST_STYLE && kind != CSS_DECL_VALUE_COLUMNS && kind != CSS_DECL_VALUE_WHITE_SPACE &&
         kind != CSS_DECL_VALUE_GRID_PAIR && kind != CSS_DECL_VALUE_GRID_AREA)
         return CSS_INVALID;
     return serialize_components(kind, members, count, out);

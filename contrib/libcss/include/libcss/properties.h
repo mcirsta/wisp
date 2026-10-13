@@ -700,13 +700,17 @@ enum css_content_visibility_e {
     CSS_CONTENT_VISIBILITY_HIDDEN = 0x2
 };
 
-enum css_white_space_e {
-    CSS_WHITE_SPACE_INHERIT = 0x0,
-    CSS_WHITE_SPACE_NORMAL = 0x1,
-    CSS_WHITE_SPACE_PRE = 0x2,
-    CSS_WHITE_SPACE_NOWRAP = 0x3,
-    CSS_WHITE_SPACE_PRE_WRAP = 0x4,
-    CSS_WHITE_SPACE_PRE_LINE = 0x5
+enum css_white_space_collapse_e {
+    CSS_WHITE_SPACE_COLLAPSE_INHERIT = 0x0,
+    CSS_WHITE_SPACE_COLLAPSE_COLLAPSE = 0x1,
+    CSS_WHITE_SPACE_COLLAPSE_PRESERVE = 0x2,
+    CSS_WHITE_SPACE_COLLAPSE_PRESERVE_BREAKS = 0x3
+};
+
+enum css_text_wrap_mode_e {
+    CSS_TEXT_WRAP_MODE_INHERIT = 0x0,
+    CSS_TEXT_WRAP_MODE_WRAP = 0x1,
+    CSS_TEXT_WRAP_MODE_NOWRAP = 0x2
 };
 
 enum css_widows_e { CSS_WIDOWS_INHERIT = 0x0, CSS_WIDOWS_SET = 0x1 };

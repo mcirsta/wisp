@@ -372,7 +372,9 @@ uint8_t css_computed_text_transform(const css_computed_style *style);
 
 uint8_t css_computed_text_indent(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_white_space(const css_computed_style *style);
+uint8_t css_computed_white_space_collapse(const css_computed_style *style);
+
+uint8_t css_computed_text_wrap_mode(const css_computed_style *style);
 
 uint8_t css_computed_background_position_x(const css_computed_style *style, css_fixed_or_calc *offset, css_unit *unit);
 uint8_t css_computed_background_position_y(const css_computed_style *style, css_fixed_or_calc *offset, css_unit *unit);

@@ -1398,14 +1398,23 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: SILENT:0,VOLUME_SILENT X_SOFT:0,VOLUME_X_SOFT SOFT:0,VOLUME_SOFT MEDIUM:0,VOLUME_MEDIUM LOUD:0,VOLUME_LOUD X_LOUD:0,VOLUME_X_LOUD IDENT:) NUMBER:( false:VOLUME_NUMBER RANGE:num<0||num>F_100 NUMBER:) LENGTH_UNIT:( UNIT_PX:VOLUME_DIMENSION MASK:UNIT_MASK_VOLUME RANGE:<0 LENGTH_UNIT:) CALC:( ANY:VOLUME_CALC MIN:0 MAX:100 CALC:)'''
 
 [white_space]
-declaration_value = "keyword"
+declaration_value = "white_space"
+declaration_longhands = ["white_space_collapse", "text_wrap_mode"]
 enum = "CSS_PROP_WHITE_SPACE"
+shorthand = true
+inherited = true
+cascade = "none"
+computed = "none"
+
+[white_space_collapse]
+declaration_value = "keyword"
+enum = "CSS_PROP_WHITE_SPACE_COLLAPSE"
 cascade = "ident"
 computed = "auto"
 inherited = true
-bits = 3
-initial = "NORMAL"
-parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NORMAL:0,WHITE_SPACE_NORMAL PRE:0,WHITE_SPACE_PRE NOWRAP:0,WHITE_SPACE_NOWRAP PRE_WRAP:0,WHITE_SPACE_PRE_WRAP PRE_LINE:0,WHITE_SPACE_PRE_LINE IDENT:)'''
+bits = 2
+initial = "COLLAPSE"
+parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: COLLAPSE:0,WHITE_SPACE_COLLAPSE_COLLAPSE PRESERVE:0,WHITE_SPACE_COLLAPSE_PRESERVE PRESERVE_BREAKS:0,WHITE_SPACE_COLLAPSE_PRESERVE_BREAKS IDENT:)'''
 
 [widows]
 declaration_value = "number"
@@ -2435,3 +2444,13 @@ initial = "SET"
 initial_data = ['(css_fixed_or_calc)0', 'CSS_UNIT_PCT']
 values = [["length", "", "calc"]]
 condition = "CSS_BACKGROUND_POSITION_SET"
+
+[text_wrap_mode]
+declaration_value = "keyword"
+enum = "CSS_PROP_TEXT_WRAP_MODE"
+cascade = "ident"
+computed = "auto"
+inherited = true
+bits = 2
+initial = "WRAP"
+parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: WRAP_STRING:0,TEXT_WRAP_MODE_WRAP NOWRAP:0,TEXT_WRAP_MODE_NOWRAP IDENT:)'''

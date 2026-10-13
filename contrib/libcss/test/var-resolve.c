@@ -2114,6 +2114,79 @@ static void test_background_position_axes(void)
     }
 }
 
+/* CSS Text 4: collapse and wrapping have independent inherited cascades. */
+static void expect_white_space(const css_computed_style *style, unsigned collapse, unsigned wrap, const char *css)
+{
+    if (css_computed_white_space_collapse(style) != collapse || css_computed_text_wrap_mode(style) != wrap) {
+        fprintf(stderr, "wrong white-space components for %s: %u/%u, expected %u/%u\n", css,
+            css_computed_white_space_collapse(style), css_computed_text_wrap_mode(style), collapse, wrap);
+        assert(false);
+    }
+}
+
+static void test_white_space_longhands(void)
+{
+    static const struct { const char *css; unsigned collapse, wrap; } cases[] = {
+        {"white-space:normal", CSS_WHITE_SPACE_COLLAPSE_COLLAPSE, CSS_TEXT_WRAP_MODE_WRAP},
+        {"white-space:pre", CSS_WHITE_SPACE_COLLAPSE_PRESERVE, CSS_TEXT_WRAP_MODE_NOWRAP},
+        {"white-space:pre-wrap", CSS_WHITE_SPACE_COLLAPSE_PRESERVE, CSS_TEXT_WRAP_MODE_WRAP},
+        {"white-space:pre-line", CSS_WHITE_SPACE_COLLAPSE_PRESERVE_BREAKS, CSS_TEXT_WRAP_MODE_WRAP},
+        {"white-space:nowrap", CSS_WHITE_SPACE_COLLAPSE_COLLAPSE, CSS_TEXT_WRAP_MODE_NOWRAP},
+        {"white-space:pre-line;text-wrap-mode:nowrap", CSS_WHITE_SPACE_COLLAPSE_PRESERVE_BREAKS, CSS_TEXT_WRAP_MODE_NOWRAP},
+        {"white-space:pre;white-space-collapse:collapse", CSS_WHITE_SPACE_COLLAPSE_COLLAPSE, CSS_TEXT_WRAP_MODE_NOWRAP},
+        {"white-space:pre;text-wrap-mode:initial", CSS_WHITE_SPACE_COLLAPSE_PRESERVE, CSS_TEXT_WRAP_MODE_WRAP},
+        {"white-space:pre!important;text-wrap-mode:wrap", CSS_WHITE_SPACE_COLLAPSE_PRESERVE, CSS_TEXT_WRAP_MODE_NOWRAP},
+        {"text-wrap-mode:nowrap!important;white-space:preserve-breaks", CSS_WHITE_SPACE_COLLAPSE_PRESERVE_BREAKS, CSS_TEXT_WRAP_MODE_NOWRAP},
+        {"--w:pre-line;white-space:var(--w);text-wrap-mode:nowrap", CSS_WHITE_SPACE_COLLAPSE_PRESERVE_BREAKS, CSS_TEXT_WRAP_MODE_NOWRAP},
+        {"--w:nowrap;white-space:pre-wrap;text-wrap-mode:var(--w)", CSS_WHITE_SPACE_COLLAPSE_PRESERVE, CSS_TEXT_WRAP_MODE_NOWRAP},
+        {"--w:preserve;white-space-collapse:var(--w);white-space:normal", CSS_WHITE_SPACE_COLLAPSE_COLLAPSE, CSS_TEXT_WRAP_MODE_WRAP},
+        {"white-space:pre;white-space-collapse:var(--missing)", CSS_WHITE_SPACE_COLLAPSE_COLLAPSE, CSS_TEXT_WRAP_MODE_NOWRAP},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        for (unsigned inlined = 0; inlined < 2; inlined++) {
+            char css[512];
+            snprintf(css, sizeof(css), "div {%s}", cases[i].css);
+            style_case ctx;
+            setup_style_case(&ctx, inlined ? "" : css);
+            if (inlined)
+                ctx.inline_style = create_stylesheet_from_css(cases[i].css, true, false);
+            const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, ctx.inline_style, &ctx.results);
+            expect_white_space(style, cases[i].collapse, cases[i].wrap, cases[i].css);
+            destroy_style_case(&ctx);
+        }
+    }
+    const char *const children[] = {"text-wrap-mode:wrap", "white-space-collapse:collapse", "white-space:inherit",
+        "white-space:initial", "white-space:unset", "white-space:var(--missing)",
+        "white-space:normal;white-space-collapse:var(--missing)", "white-space:normal;text-wrap-mode:var(--missing)"};
+    const unsigned expected[][2] = {{2,1}, {1,2}, {2,2}, {1,1}, {2,2}, {2,2}, {2,1}, {1,2}};
+    for (size_t i = 0; i < sizeof(children) / sizeof(children[0]); i++) {
+        style_case p, c;
+        const css_computed_style *parent = select_style_from_css("div {white-space:pre}", &p);
+        char css[256];
+        snprintf(css, sizeof(css), "div {%s}", children[i]);
+        setup_style_case(&c, css);
+        c.node.parent = &p.node;
+        const css_computed_style *child = select_style_for_node(&c, &c.node, NULL, &c.results);
+        css_computed_style *composed;
+        assert(css_computed_style_compose(parent, child, &unit_ctx, &composed) == CSS_OK);
+        destroy_style_case(&p);
+        destroy_style_case(&c);
+        expect_white_space(composed, expected[i][0], expected[i][1], children[i]);
+        css_computed_style_destroy(composed);
+    }
+    for (unsigned deferred = 0; deferred < 2; deferred++) {
+        style_case ctx;
+        setup_style_case(&ctx, deferred ? "div {white-space:normal;white-space-collapse:var(--missing,revert)}" :
+            "div {white-space:normal;white-space-collapse:revert}");
+        css_stylesheet *user = create_stylesheet_from_css("div {white-space:pre}", false, false);
+        assert(css_select_ctx_insert_sheet(ctx.select_ctx, user, 0, CSS_ORIGIN_USER, NULL) == CSS_OK);
+        const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+        expect_white_space(style, CSS_WHITE_SPACE_COLLAPSE_PRESERVE, CSS_TEXT_WRAP_MODE_WRAP, "independent revert");
+        destroy_style_case(&ctx);
+        css_stylesheet_destroy(user);
+    }
+}
+
 /* CSS Fonts 4 / Text Decoration 3 longhand identities share the supported
  * legacy rendering values, including substitution and cascade precedence. */
 static void test_aggregate_longhand_values(void)
@@ -2358,6 +2431,7 @@ int main(int argc, char **argv)
     test_repeat_and_decoration_values();
     test_background_repeat_axes();
     test_background_position_axes();
+    test_white_space_longhands();
     test_aggregate_longhand_values();
     test_gap_aliases();
     test_deferred_revert();

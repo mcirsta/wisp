@@ -551,6 +551,52 @@ START_TEST(test_background_position_edits)
 }
 END_TEST
 
+START_TEST(test_white_space_edits)
+{
+    css_declaration_store *store = create("white-space:pre-wrap;color:red", _i != 0);
+    check_order(store, "white-space-collapse text-wrap-mode color");
+    ck_assert(set(store, "text-wrap-mode:nowrap", _i != 0));
+    check_value(store, "white-space-collapse", "preserve", false);
+    check_value(store, "white-space", "pre", false);
+    ck_assert(set(store, "white-space-collapse:preserve-breaks", _i != 0));
+    check_value(store, "white-space", "preserve-breaks nowrap", false);
+    lwc_string *text;
+    ck_assert_int_eq(css__declaration_store_serialize(store, &text), CSS_OK);
+    css_declaration_store *copy = create(lwc_string_data(text), _i != 0);
+    check_value(copy, "white-space", "preserve-breaks nowrap", false);
+    check_text(copy, lwc_string_data(text));
+    lwc_string_unref(text);
+    css__declaration_store_destroy(copy);
+    ck_assert(set(store, "white-space:var(--WS)!important", _i != 0));
+    const css_declaration *pending = NULL;
+    /* Locate by name: prior edits can have changed declaration order. */
+    for (size_t i = 0; i < css__declaration_store_count(store); i++) {
+        const css_declaration_contribution *entry = css__declaration_store_get(store, i);
+        if (strcmp(entry->name, "white-space-collapse") == 0)
+            pending = entry->source;
+    }
+    ck_assert_ptr_nonnull(pending);
+    ck_assert(set(store, "text-wrap-mode:wrap", _i != 0));
+    check_value(store, "white-space-collapse", "", true);
+    check_value(store, "text-wrap-mode", "wrap", false);
+    for (size_t i = 0; i < css__declaration_store_count(store); i++) {
+        const css_declaration_contribution *entry = css__declaration_store_get(store, i);
+        if (strcmp(entry->name, "white-space-collapse") == 0) {
+            ck_assert_ptr_eq(entry->source, pending);
+            ck_assert(entry->source->deferred);
+        }
+    }
+    bool changed;
+    ck_assert_int_eq(css__declaration_store_remove(store, "text-wrap-mode", 14, &changed), CSS_OK);
+    ck_assert(changed);
+    check_value(store, "white-space-collapse", "", true);
+    ck_assert_int_eq(css__declaration_store_remove(store, "white-space", 11, &changed), CSS_OK);
+    ck_assert(changed);
+    check_value(store, "color", "red", false);
+    css__declaration_store_destroy(store);
+}
+END_TEST
+
 START_TEST(test_calc_values_survive_edits)
 {
     css_declaration_store *store = create("margin:calc(50% - (2px + 1px)) calc(1em * 2)!important;"
@@ -1144,6 +1190,7 @@ int main(void)
     tcase_add_loop_test(tc, test_calc_values_survive_edits, 0, 2);
     tcase_add_loop_test(tc, test_background_repeat_edits, 0, 2);
     tcase_add_loop_test(tc, test_background_position_edits, 0, 2);
+    tcase_add_loop_test(tc, test_white_space_edits, 0, 2);
     tcase_add_test(tc, test_nonfinite_values_survive_edits);
     tcase_add_loop_test(tc, test_pending_sources_survive_edits, 0, 2);
     tcase_add_test(tc, test_length_and_borrowed_names);

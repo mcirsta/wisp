@@ -189,9 +189,9 @@ uint8_t css_computed_list_style_type(const css_computed_style *style)
 {
     return CSS_LIST_STYLE_TYPE_NONE;
 }
-uint8_t css_computed_white_space(const css_computed_style *style)
+uint8_t css_computed_white_space_collapse(const css_computed_style *style)
 {
-    return CSS_WHITE_SPACE_NORMAL;
+    return CSS_WHITE_SPACE_COLLAPSE_COLLAPSE;
 }
 uint8_t css_computed_list_style_image(const css_computed_style *style, lwc_string **url)
 {
@@ -316,6 +316,13 @@ bool html_fetch_object_buffer(struct html_content *c, const uint8_t *data, size_
 }
 
 /* Strings/Talloc */
+char *squash_whitespace_preserve_breaks(const char *s)
+{
+    (void)s;
+    ck_abort_msg("Grid construction stub styles only use white-space-collapse: collapse");
+    return NULL;
+}
+
 char *squash_whitespace(const char *s)
 {
     return strdup(s);

@@ -2314,6 +2314,26 @@ static const struct {
     {"background-position:var(--P)", "background-position-x", ""},
     {"background-position:var(--P);background-position-x:left", "background-position", ""},
     {"background-position-x:var(--P)", "background-position-x", "var(--P)"},
+    {"white-space:NORMAL", "white-space-collapse", "collapse"},
+    {"white-space:PRE", "text-wrap-mode", "nowrap"},
+    {"white-space:pre-wrap", "white-space-collapse", "preserve"},
+    {"white-space:PRE-LINE", "white-space-collapse", "preserve-breaks"},
+    {"white-space:pre-wrap;text-wrap-mode:nowrap", "white-space", "pre"},
+    {"white-space:pre;white-space-collapse:collapse", "white-space", "nowrap"},
+    {"white-space:nowrap PRESERVE", "white-space", "pre"},
+    {"white-space:wrap collapse", "white-space", "normal"},
+    {"white-space:preserve-breaks nowrap", "white-space", "preserve-breaks nowrap"},
+    {"white-space:nowrap preserve-breaks", "white-space", "preserve-breaks nowrap"},
+    {"white-space:wrap", "white-space", "normal"},
+    {"white-space:preserve", "white-space", "pre-wrap"},
+    {"white-space:preserve-breaks", "white-space", "pre-line"},
+    {"white-space:var(--WS)", "text-wrap-mode", ""},
+    {"white-space:var(--WS);text-wrap-mode:nowrap", "white-space", ""},
+    {"text-wrap-mode:var(--W)", "text-wrap-mode", "var(--W)"},
+    {"white-space:pre!important;text-wrap-mode:wrap", "white-space", "pre"},
+    {"white-space-collapse:preserve!important;text-wrap-mode:wrap", "white-space", ""},
+    {"white-space-collapse:inherit;text-wrap-mode:inherit", "white-space", "inherit"},
+    {"white-space-collapse:initial;text-wrap-mode:inherit", "white-space", ""},
     {"background-repeat:repeat-x,repeat-y", "background-repeat-x", "repeat, no-repeat"},
     {"background-repeat:repeat-x,repeat-y", "background-repeat-y", "no-repeat, repeat"},
     {"background:repeat-y,repeat-x red", "background-repeat-x", "no-repeat, repeat"},
@@ -3872,6 +3892,32 @@ START_TEST(test_repeat_decoration_invalid)
 }
 END_TEST
 
+START_TEST(test_white_space_invalid)
+{
+    static const struct { const char *property, *value; } cases[] = {
+        {"white-space", "normal nowrap"}, {"white-space", "pre wrap"}, {"white-space", "pre-line preserve"},
+        {"white-space", "collapse collapse"}, {"white-space", "wrap nowrap"},
+        {"white-space", "preserve collapse"}, {"white-space", "preserve wrap wrap"},
+        {"white-space", "wrap, preserve"}, {"white-space", "inherit wrap"}, {"white-space", "wrap initial"},
+        {"white-space", "break-spaces"}, {"white-space", "preserve-spaces"}, {"white-space", "discard-before"},
+        {"white-space-collapse", "normal"}, {"white-space-collapse", "nowrap"},
+        {"white-space-collapse", "preserve preserve"}, {"white-space-collapse", "break-spaces"},
+        {"text-wrap-mode", "pre"}, {"text-wrap-mode", "balance"}, {"text-wrap-mode", "wrap nowrap"},
+    };
+    for (size_t i = 0; i < N_ELEMENTS(cases); i++) {
+        char css[192];
+        snprintf(css, sizeof(css), "%s:inherit", cases[i].property);
+        css_declaration_list *base = parse(css, false);
+        snprintf(css, sizeof(css), "%s:inherit;%s:%s", cases[i].property, cases[i].property, cases[i].value);
+        css_declaration_list *list = parse(css, _i != 0);
+        ck_assert_msg(css__declaration_list_count(list) == 1, "accepted invalid/unsupported white-space: %s", css);
+        compare_sheets(css__declaration_list_sheet(base), css__declaration_list_sheet(list));
+        css__declaration_list_destroy(list);
+        css__declaration_list_destroy(base);
+    }
+}
+END_TEST
+
 START_TEST(test_position_invalid)
 {
     static const struct { const char *property, *value; } axis_cases[] = {
@@ -5372,18 +5418,21 @@ END_TEST
 
 /* Force either emitted word to allocate, for explicit, defaulted and CSS-wide
  * pairs. No failure may publish a partial shorthand or consume its tokens. */
-START_TEST(test_place_content_rollback)
+START_TEST(test_pair_keyword_rollback)
 {
+    unsigned variant = _i % 3;
+    bool white_space = _i >= 3;
+    css_prop_handler handler = white_space ? css__parse_white_space : css__parse_place_content;
     css_stylesheet *sheet;
     ck_assert_int_eq(css_stylesheet_create(&params, &sheet), CSS_OK);
     css_language *language = sheet->parser_frontend;
-    css_token parts[] = {{.type = CSS_TOKEN_IDENT, .idata = language->strings[CENTER]},
-        {.type = CSS_TOKEN_S}, {.type = CSS_TOKEN_IDENT, .idata = language->strings[FLEX_END]}};
-    if (_i == 2)
+    css_token parts[] = {{.type = CSS_TOKEN_IDENT, .idata = language->strings[white_space ? PRESERVE : CENTER]},
+        {.type = CSS_TOKEN_S}, {.type = CSS_TOKEN_IDENT, .idata = language->strings[white_space ? NOWRAP : FLEX_END]}};
+    if (variant == 2)
         parts[0].idata = language->strings[INITIAL];
     parserutils_vector *tokens;
     ck_assert_int_eq(parserutils_vector_create(sizeof(css_token), 4, &tokens), PARSERUTILS_OK);
-    for (size_t i = 0; i < (_i == 0 ? N_ELEMENTS(parts) : 1); i++)
+    for (size_t i = 0; i < (variant == 0 ? N_ELEMENTS(parts) : 1); i++)
         ck_assert_int_eq(parserutils_vector_append(tokens, &parts[i]), PARSERUTILS_OK);
     for (unsigned spare = 0; spare < 2; spare++) {
         css_style *style;
@@ -5393,14 +5442,14 @@ START_TEST(test_place_content_rollback)
             ck_assert_int_eq(css__stylesheet_style_append(style, 0x12345678), CSS_OK);
         int32_t ctx = 0;
         realloc_limit(0);
-        css_error error = css__parse_place_content(language, tokens, &ctx, style);
+        css_error error = handler(language, tokens, &ctx, style);
         realloc_limit(UINT_MAX);
-        ck_assert_msg(error == CSS_NOMEM, "place-content variant %d spare %u: %d", _i, spare, error);
+        ck_assert_msg(error == CSS_NOMEM, "pair-keyword case %d spare %u: %d", _i, spare, error);
         ck_assert_int_eq(ctx, 0);
         ck_assert_uint_eq(style->used, before);
         for (uint32_t i = 0; i < before; i++)
             ck_assert_uint_eq(style->bytecode[i], 0x12345678);
-        ck_assert_int_eq(css__parse_place_content(language, tokens, &ctx, style), CSS_OK);
+        ck_assert_int_eq(handler(language, tokens, &ctx, style), CSS_OK);
         ck_assert_uint_eq(style->used, before + 2);
         css__stylesheet_style_destroy(style);
     }
@@ -5693,6 +5742,7 @@ int main(void)
     tcase_add_loop_test(tc, test_decoration_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_repeat_decoration_invalid, 0, 2);
     tcase_add_loop_test(tc, test_position_invalid, 0, 2);
+    tcase_add_loop_test(tc, test_white_space_invalid, 0, 2);
     tcase_add_loop_test(tc, test_place_content_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_place_content_invalid, 0, 2);
     tcase_add_test(tc, test_quirky_border_values);
@@ -5716,7 +5766,7 @@ int main(void)
     tcase_add_loop_test(tc, test_position_rollback, 0, 2);
     tcase_add_loop_test(tc, test_font_rollback, 0, 5);
     tcase_add_loop_test(tc, test_gap_rollback, 0, 4);
-    tcase_add_loop_test(tc, test_place_content_rollback, 0, 3);
+    tcase_add_loop_test(tc, test_pair_keyword_rollback, 0, 6);
     tcase_add_loop_test(tc, test_grid_placement_rollback, 0, 7);
     tcase_add_loop_test(tc, test_font_face_allocation_failure, 0, 3);
     tcase_add_test(tc, test_content_terminator_allocation_failure);

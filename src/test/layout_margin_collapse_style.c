@@ -42,6 +42,10 @@ css_computed_style *create_block_style(void)
     /* height: auto */
     set_height(s, CSS_HEIGHT_AUTO, (css_fixed_or_calc)0, CSS_UNIT_PX);
 
+    /* Mock styles reach layout directly, without selection/composition. */
+    set_white_space_collapse(s, CSS_WHITE_SPACE_COLLAPSE_COLLAPSE);
+    set_text_wrap_mode(s, CSS_TEXT_WRAP_MODE_WRAP);
+
     /* font-size: 16px (needed for CSS unit conversions) */
     set_font_size(s, CSS_FONT_SIZE_DIMENSION, (css_fixed_or_calc)INTTOFIX(16), CSS_UNIT_PX);
 

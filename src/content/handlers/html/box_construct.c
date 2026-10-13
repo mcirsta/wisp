@@ -1432,244 +1432,122 @@ static void box_construct_space(struct box *box, const css_computed_style *style
     }
 }
 
-/**
- * Construct ordinary text from a DOM text node or a non-replaced image's alt.
- *
- * \param  ctx  Tree construction context
- * \param  data  Borrowed, NUL-terminated UTF-8 text
- * \param  length  Text length in bytes
- * \return  true on success, false on memory exhaustion
- */
+static bool box_construct_text_container(struct box_construct_ctx *ctx, struct box_construct_props *props)
+{
+    if (props->inline_container != NULL)
+        return true;
+    props->inline_container = box_create(NULL, NULL, false, NULL, NULL, NULL, NULL, ctx->bctx);
+    if (props->inline_container == NULL)
+        return false;
+    props->inline_container->type = BOX_INLINE_CONTAINER;
+    box_add_child(props->containing_block, props->inline_container);
+    return true;
+}
+
+/* A normalized run contains no forced break. Collapsible edge spaces retain
+ * their source font and wrapping policy, including across inline boundaries. */
+static bool box_construct_text_run(struct box_construct_ctx *ctx, struct box_construct_props *props,
+    const char *text, bool collapse, bool forced_line)
+{
+    if (collapse && !forced_line && (text[0] == 0 || (text[0] == ' ' && text[1] == 0))) {
+        if (text[0] == ' ' && props->inline_container != NULL)
+            box_construct_space(props->inline_container->last, props->parent_style);
+        return true;
+    }
+    if (!box_construct_text_container(ctx, props))
+        return false;
+    struct box *box = box_create(NULL, (css_computed_style *)props->parent_style, false, props->href,
+        props->target, props->title, NULL, ctx->bctx);
+    if (box == NULL)
+        return false;
+    box->type = BOX_TEXT;
+    /* Retain source identity through line splitting, reveal restyles and hit testing. */
+    box->text_node = dom_node_ref(ctx->n);
+    box->flags |= props->inherited_flags;
+    box->text = talloc_strdup(ctx->bctx, text);
+    if (box->text == NULL)
+        return false;
+    box->length = strlen(box->text);
+    box_add_child(props->inline_container, box);
+    if (collapse && box->length != 0 && box->text[box->length - 1] == ' ') {
+        box->length--;
+        box->space = UNKNOWN_WIDTH;
+    }
+    if (collapse && box->length != 0 && box->text[0] == ' ') {
+        box->length--;
+        memmove(box->text, box->text + 1, box->length);
+        box_construct_space(box->prev, props->parent_style);
+    }
+    return true;
+}
+
+/** Construct ordinary text from a DOM text node or a non-replaced image's alt. */
 static bool box_construct_text_data(struct box_construct_ctx *ctx, const char *data, size_t length)
 {
     struct box_construct_props props;
-    struct box *box = NULL;
-
     assert(ctx->n != NULL);
-
     box_extract_properties(ctx, &props);
-
     assert(props.containing_block != NULL);
-
-    if (css_computed_white_space(props.parent_style) == CSS_WHITE_SPACE_NORMAL ||
-        css_computed_white_space(props.parent_style) == CSS_WHITE_SPACE_NOWRAP) {
-        char *text;
-
+    uint8_t collapse = css_computed_white_space_collapse(props.parent_style);
+    char *text;
+    if (collapse == CSS_WHITE_SPACE_COLLAPSE_COLLAPSE)
         text = squash_whitespace(data);
-
-        if (text == NULL)
-            return false;
-
-        /* if the text is just a space, combine it with the preceding
-         * text node, if any */
-        if (text[0] == ' ' && text[1] == 0) {
-            if (props.inline_container != NULL) {
-                assert(props.inline_container->last != NULL);
-
-                box_construct_space(props.inline_container->last, props.parent_style);
+    else if (collapse == CSS_WHITE_SPACE_COLLAPSE_PRESERVE_BREAKS)
+        text = squash_whitespace_preserve_breaks(data);
+    else {
+        assert(collapse == CSS_WHITE_SPACE_COLLAPSE_PRESERVE);
+        text = malloc(length + 1);
+        if (text != NULL) {
+            memcpy(text, data, length);
+            text[length] = 0;
+            /* TODO: Preserved tabs need tab stops rather than one space. */
+            for (size_t i = 0; i < length; i++) {
+                if (text[i] == '\t')
+                    text[i] = ' ';
             }
-
-            free(text);
-
-            return true;
         }
-
-        if (props.inline_container == NULL) {
-            /* Child of a block without a current container
-             * (i.e. this box is the first child of its parent, or
-             * was preceded by block-level siblings) */
-
-            /* DEBUG: Log when containing block doesn't have inline container */
-            if (props.containing_block != NULL) {
-                const char *tag = "";
-                const char *cls = "";
-                dom_string *name = NULL;
-                dom_string *class_attr = NULL;
-                if (props.containing_block->node != NULL) {
-                    if (dom_node_get_node_name(props.containing_block->node, &name) == DOM_NO_ERR && name != NULL) {
-                        tag = dom_string_data(name);
-                    }
-                    if (dom_element_get_attribute(props.containing_block->node, corestring_dom_class, &class_attr) ==
-                            DOM_NO_ERR &&
-                        class_attr != NULL) {
-                        cls = dom_string_data(class_attr);
-                    }
-                }
-                NSLOG(wisp, INFO, "TEXT_BOX: creating inline_container for text, parent: tag=%s class='%s' type=%d",
-                    tag, cls, props.containing_block->type);
-                if (name)
-                    dom_string_unref(name);
-                if (class_attr)
-                    dom_string_unref(class_attr);
-            }
-
-            props.inline_container = box_create(NULL, NULL, false, NULL, NULL, NULL, NULL, ctx->bctx);
-            if (props.inline_container == NULL) {
-                free(text);
-                return false;
-            }
-
-            props.inline_container->type = BOX_INLINE_CONTAINER;
-
-            box_add_child(props.containing_block, props.inline_container);
-        }
-
-        /** \todo Dropping const here is not clever */
-        box = box_create(NULL, (css_computed_style *)props.parent_style, false, props.href, props.target, props.title,
-            NULL, ctx->bctx);
-        if (box == NULL) {
-            free(text);
-            return false;
-        }
-
-        box->type = BOX_TEXT;
-        /* Preserve source identity through line splitting and reveal restyles.
-         * Hit testing resolves the enclosing element from this text node. */
-        box->text_node = dom_node_ref(ctx->n);
-
-        box->flags |= props.inherited_flags;
-        box->text = talloc_strdup(ctx->bctx, text);
-        free(text);
-        if (box->text == NULL)
-            return false;
-
-        box->length = strlen(box->text);
-
-        /* strip ending space char off */
-        if (box->length > 1 && box->text[box->length - 1] == ' ') {
-            box->space = UNKNOWN_WIDTH;
-            box->length--;
-        }
-
-        if (css_computed_text_transform(props.parent_style) != CSS_TEXT_TRANSFORM_NONE)
-            box_text_transform(box->text, box->length, css_computed_text_transform(props.parent_style));
-
-        box_add_child(props.inline_container, box);
-
-        if (box->text[0] == ' ') {
-            box->length--;
-
-            memmove(box->text, &box->text[1], box->length);
-
-            box_construct_space(box->prev, props.parent_style);
-        }
+    }
+    if (text == NULL)
+        return false;
+    if (css_computed_text_transform(props.parent_style) != CSS_TEXT_TRANSFORM_NONE)
+        box_text_transform(text, strlen(text), css_computed_text_transform(props.parent_style));
+    bool success = true;
+    if (collapse == CSS_WHITE_SPACE_COLLAPSE_COLLAPSE) {
+        success = box_construct_text_run(ctx, &props, text, true, false);
     } else {
-        /* white-space: pre */
-        char *text;
-        size_t text_len = length;
-        size_t i;
-        char *current;
-        enum css_white_space_e white_space = css_computed_white_space(props.parent_style);
-
-        /* note: pre-wrap/pre-line are unimplemented */
-        assert(white_space == CSS_WHITE_SPACE_PRE || white_space == CSS_WHITE_SPACE_PRE_LINE ||
-            white_space == CSS_WHITE_SPACE_PRE_WRAP);
-
-        text = malloc(text_len + 1);
-
-        if (text == NULL)
-            return false;
-
-        memcpy(text, data, text_len);
-        text[text_len] = '\0';
-
-        /* TODO: Handle tabs properly */
-        for (i = 0; i < text_len; i++)
-            if (text[i] == '\t')
-                text[i] = ' ';
-
-        if (css_computed_text_transform(props.parent_style) != CSS_TEXT_TRANSFORM_NONE)
-            box_text_transform(text, strlen(text), css_computed_text_transform(props.parent_style));
-
-        current = text;
-
-        /* swallow a single leading new line */
+        char *current = text;
+        /* Keep the existing HTML preformatted-element leading-newline rule. */
         if (props.containing_block->flags & PRE_STRIP) {
-            switch (*current) {
-            case '\n':
+            if (*current == '\n')
                 current++;
-                break;
-            case '\r':
+            else if (*current == '\r') {
                 current++;
                 if (*current == '\n')
                     current++;
-                break;
             }
             props.containing_block->flags &= ~PRE_STRIP;
         }
-
         do {
             size_t len = strcspn(current, "\r\n");
-
-            char old = current[len];
-
+            char newline = current[len];
             current[len] = 0;
-
-            if (props.inline_container == NULL) {
-                /* Child of a block without a current container
-                 * (i.e. this box is the first child of its
-                 * parent, or was preceded by block-level
-                 * siblings) */
-                props.inline_container = box_create(NULL, NULL, false, NULL, NULL, NULL, NULL, ctx->bctx);
-                if (props.inline_container == NULL) {
-                    free(text);
-                    return false;
-                }
-
-                props.inline_container->type = BOX_INLINE_CONTAINER;
-
-                box_add_child(props.containing_block, props.inline_container);
-            }
-
-            /** \todo Dropping const isn't clever */
-            box = box_create(NULL, (css_computed_style *)props.parent_style, false, props.href, props.target,
-                props.title, NULL, ctx->bctx);
-            if (box == NULL) {
-                free(text);
-                return false;
-            }
-
-            box->type = BOX_TEXT;
-            box->text_node = dom_node_ref(ctx->n);
-
-            box->flags |= props.inherited_flags;
-            box->text = talloc_strdup(ctx->bctx, current);
-            if (box->text == NULL) {
-                free(text);
-                return false;
-            }
-
-            box->length = strlen(box->text);
-
-            box_add_child(props.inline_container, box);
-
-            current[len] = old;
-
+            success = box_construct_text_run(ctx, &props, current,
+                collapse == CSS_WHITE_SPACE_COLLAPSE_PRESERVE_BREAKS, newline != 0);
+            current[len] = newline;
+            if (!success || newline == 0)
+                break;
             current += len;
-
-            if (current[0] != '\0') {
-                /* Linebreak: create new inline container */
-                props.inline_container = box_create(NULL, NULL, false, NULL, NULL, NULL, NULL, ctx->bctx);
-                if (props.inline_container == NULL) {
-                    free(text);
-                    return false;
-                }
-
-                props.inline_container->type = BOX_INLINE_CONTAINER;
-
-                box_add_child(props.containing_block, props.inline_container);
-
-                if (current[0] == '\r' && current[1] == '\n')
-                    current += 2;
-                else
-                    current++;
+            current += current[0] == '\r' && current[1] == '\n' ? 2 : 1;
+            /* Each preserved newline starts another line, even under nowrap. */
+            props.inline_container = NULL;
+            if (!box_construct_text_container(ctx, &props)) {
+                success = false;
+                break;
             }
         } while (*current);
-
-        free(text);
     }
-
-    return true;
+    free(text);
+    return success;
 }
 
 static bool box_construct_text(struct box_construct_ctx *ctx)

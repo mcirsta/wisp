@@ -42,6 +42,13 @@
  */
 char *squash_whitespace(const char *s);
 
+/** Collapse spaces/tabs while preserving segment breaks (CRLF/CR become LF).
+ * Spaces surrounding a break are discarded; other leading/trailing runs keep
+ * one space for the caller to collapse across text-node boundaries.
+ * Returns a malloc-owned string, or NULL on allocation failure.
+ */
+char *squash_whitespace_preserve_breaks(const char *s);
+
 
 /**
  * Converts NUL terminated UTF-8 encoded string s containing zero or more

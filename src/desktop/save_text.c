@@ -138,8 +138,7 @@ void save_text_solve_whitespace(
         (box->type == BOX_TABLE_ROW || box->type == BOX_BR ||
             (box->type != BOX_INLINE && (box->parent && box->parent->list_marker == box)) ||
             (box->parent && box->parent->style &&
-                (css_computed_white_space(box->parent->style) == CSS_WHITE_SPACE_PRE ||
-                    css_computed_white_space(box->parent->style) == CSS_WHITE_SPACE_PRE_WRAP) &&
+                css_computed_white_space_collapse(box->parent->style) != CSS_WHITE_SPACE_COLLAPSE_COLLAPSE &&
                 box->type == BOX_INLINE_CONTAINER))) {
         if (*before == WHITESPACE_ONE_NEW_LINE)
             *before = WHITESPACE_TWO_NEW_LINES;

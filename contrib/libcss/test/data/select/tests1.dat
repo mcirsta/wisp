@@ -108,7 +108,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -225,7 +226,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -345,7 +347,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -469,7 +472,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -594,7 +598,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -719,7 +724,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -844,7 +850,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -959,7 +966,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -1075,7 +1083,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -1191,7 +1200,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -1306,7 +1316,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -1426,7 +1437,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -1546,7 +1558,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -1667,7 +1680,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -1791,7 +1805,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -1914,7 +1929,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -2043,7 +2059,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -2172,7 +2189,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -2301,7 +2319,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -2434,7 +2453,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -2566,7 +2586,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -2696,7 +2717,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -2825,7 +2847,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -2954,7 +2977,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -3083,7 +3107,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -3212,7 +3237,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -3341,7 +3367,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -3470,7 +3497,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -3599,7 +3627,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -3728,7 +3757,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -3857,7 +3887,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -3986,7 +4017,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -4115,7 +4147,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -4244,7 +4277,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -4373,7 +4407,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -4502,7 +4537,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -4631,7 +4667,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -4760,7 +4797,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -4889,7 +4927,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -5018,7 +5057,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -5147,7 +5187,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -5276,7 +5317,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -5398,7 +5440,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -5520,7 +5563,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -5642,7 +5686,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: vertical-lr
@@ -5761,7 +5806,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -5881,7 +5927,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -6001,7 +6048,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -6121,7 +6169,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -6237,7 +6286,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -6354,7 +6404,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -6470,7 +6521,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -6586,7 +6638,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -6702,7 +6755,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -6818,7 +6872,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -6934,7 +6989,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -7052,7 +7108,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -7168,7 +7225,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -7284,7 +7342,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -7401,7 +7460,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -7517,7 +7577,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -7633,7 +7694,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -7749,7 +7811,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -7865,7 +7928,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -7981,7 +8045,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -8097,7 +8162,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -8213,7 +8279,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -8328,7 +8395,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -8443,7 +8511,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -8558,7 +8627,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -8675,7 +8745,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -8792,7 +8863,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -8907,7 +8979,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -9024,7 +9097,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -9141,7 +9215,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -9258,7 +9333,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -9373,7 +9449,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -9488,7 +9565,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -9603,7 +9681,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -9718,7 +9797,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -9833,7 +9913,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -9948,7 +10029,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -10063,7 +10145,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -10178,7 +10261,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -10295,7 +10379,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -10412,7 +10497,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -10527,7 +10613,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -10642,7 +10729,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -10757,7 +10845,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -10872,7 +10961,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -10987,7 +11077,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -11102,7 +11193,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -11217,7 +11309,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -11334,7 +11427,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -11451,7 +11545,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -11566,7 +11661,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -11681,7 +11777,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -11796,7 +11893,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -11913,7 +12011,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -12028,7 +12127,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -12145,7 +12245,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -12260,7 +12361,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -12375,7 +12477,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -12490,7 +12593,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10px
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -12605,7 +12709,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 5.996em
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -12720,7 +12825,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10em
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -12835,7 +12941,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10in
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -12950,7 +13057,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10mm
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -13065,7 +13173,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10pt
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -13180,7 +13289,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10pc
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -13295,7 +13405,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10em
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -13410,7 +13521,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10ch
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -13525,7 +13637,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10ch
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -13640,7 +13753,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10rem
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -13755,7 +13869,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10lh
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -13870,7 +13985,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10rem
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -13985,7 +14101,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10vh
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -14100,7 +14217,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10vw
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -14215,7 +14333,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10vi
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -14330,7 +14449,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10vb
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -14445,7 +14565,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10vmin
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -14560,7 +14681,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10vmax
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -14675,7 +14797,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10q
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -14790,7 +14913,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: 10%
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -14924,7 +15048,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -15039,7 +15164,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
@@ -15154,7 +15280,8 @@ top: auto
 unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
-white-space: normal
+white-space-collapse: collapse
+text-wrap-mode: wrap
 width: auto
 word-spacing: normal
 writing-mode: horizontal-tb

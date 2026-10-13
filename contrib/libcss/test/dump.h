@@ -336,7 +336,7 @@ static const char *opcode_names[] = {
     "visibility",
     "voice-family",
     "volume",
-    "white-space",
+    "white-space-collapse",
     "widows",
     "width",
     "word-spacing",
@@ -386,6 +386,7 @@ static const char *opcode_names[] = {
     [CSS_PROP_CONTENT_VISIBILITY] = "content-visibility",
     [CSS_PROP_BACKGROUND_REPEAT_Y] = "background-repeat-y",
     [CSS_PROP_BACKGROUND_POSITION_Y] = "background-position-y",
+    [CSS_PROP_TEXT_WRAP_MODE] = "text-wrap-mode",
 };
 
 static void dump_css_fixed(css_fixed f, struct dump_output *out)

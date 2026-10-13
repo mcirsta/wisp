@@ -58,6 +58,17 @@ class DeclarationMetadataTest(unittest.TestCase):
                     self.reader.validate_declarations()
                 self.reader.toml_data[name]['declaration_longhands'].reverse()
 
+    def test_white_space_longhands(self):
+        self.assertEqual(self.reader.toml_data['white_space']['declaration_longhands'],
+                         ['white_space_collapse', 'text_wrap_mode'])
+        dispatch = {prop['name']: prop for prop in self.reader.get_dispatch_order()}
+        self.assertNotIn('white_space', dispatch)
+        for name in ('white_space_collapse', 'text_wrap_mode'):
+            self.assertTrue(dispatch[name]['inherited'])
+        self.reader.toml_data['white_space']['declaration_longhands'].reverse()
+        with self.assertRaisesRegex(ValueError, 'white_space: declaration_value requires ordered members'):
+            self.reader.validate_declarations()
+
     def test_legacy_alias_validation(self):
         for aliases in ("grid-gap", [1], ["GRID-GAP"], ["grid_gap"], ["--gap"], ["gríd-gap"],
                         ["gap"], ["row-gap"], ["grid-row-gap"], ["grid-gap", "grid-gap"]):

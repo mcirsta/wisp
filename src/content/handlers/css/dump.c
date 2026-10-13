@@ -1772,23 +1772,30 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
         break;
     }
 
-    /* white-space */
-    val = css_computed_white_space(style);
+    /* white-space-collapse */
+    val = css_computed_white_space_collapse(style);
     switch (val) {
-    case CSS_WHITE_SPACE_NORMAL:
-        fprintf(stream, "white-space: normal ");
+    case CSS_WHITE_SPACE_COLLAPSE_COLLAPSE:
+        fprintf(stream, "white-space-collapse: collapse ");
         break;
-    case CSS_WHITE_SPACE_PRE:
-        fprintf(stream, "white-space: pre ");
+    case CSS_WHITE_SPACE_COLLAPSE_PRESERVE:
+        fprintf(stream, "white-space-collapse: preserve ");
         break;
-    case CSS_WHITE_SPACE_NOWRAP:
-        fprintf(stream, "white-space: nowrap ");
+    case CSS_WHITE_SPACE_COLLAPSE_PRESERVE_BREAKS:
+        fprintf(stream, "white-space-collapse: preserve-breaks ");
         break;
-    case CSS_WHITE_SPACE_PRE_WRAP:
-        fprintf(stream, "white-space: pre-wrap ");
+    default:
         break;
-    case CSS_WHITE_SPACE_PRE_LINE:
-        fprintf(stream, "white-space: pre-line ");
+    }
+
+    /* text-wrap-mode */
+    val = css_computed_text_wrap_mode(style);
+    switch (val) {
+    case CSS_TEXT_WRAP_MODE_WRAP:
+        fprintf(stream, "text-wrap-mode: wrap ");
+        break;
+    case CSS_TEXT_WRAP_MODE_NOWRAP:
+        fprintf(stream, "text-wrap-mode: nowrap ");
         break;
     default:
         break;

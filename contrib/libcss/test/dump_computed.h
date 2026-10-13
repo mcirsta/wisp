@@ -3267,26 +3267,39 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
     ptr += wrote;
     *len -= wrote;
 
-    /* white-space */
-    val = css_computed_white_space(style);
+    /* white-space-collapse */
+    val = css_computed_white_space_collapse(style);
     switch (val) {
-    case CSS_WHITE_SPACE_INHERIT:
-        wrote = snprintf(ptr, *len, "white-space: inherit\n");
+    case CSS_WHITE_SPACE_COLLAPSE_INHERIT:
+        wrote = snprintf(ptr, *len, "white-space-collapse: inherit\n");
         break;
-    case CSS_WHITE_SPACE_NORMAL:
-        wrote = snprintf(ptr, *len, "white-space: normal\n");
+    case CSS_WHITE_SPACE_COLLAPSE_COLLAPSE:
+        wrote = snprintf(ptr, *len, "white-space-collapse: collapse\n");
         break;
-    case CSS_WHITE_SPACE_PRE:
-        wrote = snprintf(ptr, *len, "white-space: pre\n");
+    case CSS_WHITE_SPACE_COLLAPSE_PRESERVE:
+        wrote = snprintf(ptr, *len, "white-space-collapse: preserve\n");
         break;
-    case CSS_WHITE_SPACE_NOWRAP:
-        wrote = snprintf(ptr, *len, "white-space: nowrap\n");
+    case CSS_WHITE_SPACE_COLLAPSE_PRESERVE_BREAKS:
+        wrote = snprintf(ptr, *len, "white-space-collapse: preserve-breaks\n");
         break;
-    case CSS_WHITE_SPACE_PRE_WRAP:
-        wrote = snprintf(ptr, *len, "white-space: pre-wrap\n");
+    default:
+        wrote = 0;
         break;
-    case CSS_WHITE_SPACE_PRE_LINE:
-        wrote = snprintf(ptr, *len, "white-space: pre-line\n");
+    }
+    ptr += wrote;
+    *len -= wrote;
+
+    /* text-wrap-mode */
+    val = css_computed_text_wrap_mode(style);
+    switch (val) {
+    case CSS_TEXT_WRAP_MODE_INHERIT:
+        wrote = snprintf(ptr, *len, "text-wrap-mode: inherit\n");
+        break;
+    case CSS_TEXT_WRAP_MODE_WRAP:
+        wrote = snprintf(ptr, *len, "text-wrap-mode: wrap\n");
+        break;
+    case CSS_TEXT_WRAP_MODE_NOWRAP:
+        wrote = snprintf(ptr, *len, "text-wrap-mode: nowrap\n");
         break;
     default:
         wrote = 0;

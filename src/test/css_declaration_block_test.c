@@ -46,6 +46,13 @@ static const struct {
     const char *input, *expected;
     bool pending; /* Partial pending shorthands serialize empty longhands, not round-trippable values. */
 } cases[] = {
+    {"white-space:pre-wrap;text-wrap-mode:nowrap", "white-space: pre;"},
+    {"white-space:pre;white-space-collapse:preserve-breaks", "white-space: preserve-breaks nowrap;"},
+    {"text-wrap-mode:wrap;white-space-collapse:collapse", "white-space: normal;"},
+    {"white-space:pre!important;text-wrap-mode:wrap", "white-space: pre !important;"},
+    {"white-space-collapse:preserve!important;text-wrap-mode:wrap",
+        "white-space-collapse: preserve !important; text-wrap-mode: wrap;"},
+    {"white-space:var(--WS);text-wrap-mode:nowrap", "white-space-collapse: ; text-wrap-mode: nowrap;", true},
     {"background-position:10px 20px,30px 40px;background-position-x:5px",
         "background-position-y: 20px, 40px; background-position-x: 5px;"},
     {"background-position-x:left,right;background-position-y:top,bottom",

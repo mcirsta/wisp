@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8"><title>Independent white-space longhands</title>
+<style>
+body { margin:0; color:black; background:white; font:20px/24px monospace; }
+.row { position:relative; height:140px; }
+.sample { position:absolute; top:0; width:70px; }
+.actual { left:0; } .reference { left:260px; }
+</style>
+<!-- References express the same CSS Text rules using the older keywords or
+     already-collapsed text and explicit forced breaks; no browser oracle. -->
+<div class="row"><div id="collapse-nowrap" class="sample actual" style="white-space:pre;white-space-collapse:collapse">AAA   BBB  CCC</div><div id="collapse-nowrap-ref" class="sample reference" style="white-space:nowrap">AAA BBB CCC</div></div>
+<div class="row"><div id="preserve-wrap" class="sample actual" style="white-space:pre;text-wrap-mode:wrap">AAA BBB CCC DDD</div><div id="preserve-wrap-ref" class="sample reference" style="white-space:pre-wrap">AAA BBB CCC DDD</div></div>
+<div class="row"><div id="preserve-nowrap" class="sample actual" style="white-space:nowrap preserve">AAA  BBB
+CCC</div><div id="preserve-nowrap-ref" class="sample reference" style="white-space:pre">AAA  BBB
+CCC</div></div>
+<div class="row"><div id="pre-line" class="sample actual" style="white-space:pre-line;width:200px">AA   BB
+   CC  DD</div><div id="pre-line-ref" class="sample reference" style="white-space:normal;width:200px">AA BB<br>CC DD</div></div>
+<div class="row"><div id="breaks-nowrap" class="sample actual" style="white-space:pre-line;text-wrap-mode:nowrap">AAA   BBB
+CCC   DDD</div><div id="breaks-nowrap-ref" class="sample reference" style="white-space:nowrap">AAA BBB<br>CCC DDD</div></div>
+<div class="row"><div id="variable" class="sample actual" style="--ws:preserve nowrap;white-space:var(--ws);text-wrap-mode:wrap!important">AAA BBB CCC</div><div id="variable-ref" class="sample reference" style="white-space:pre-wrap">AAA BBB CCC</div></div>
+<div class="row"><div id="cross-node" class="sample actual" style="white-space:preserve-breaks;width:200px">AA<span>  </span> BB
+<span>  CC </span> DD</div><div id="cross-node-ref" class="sample reference" style="white-space:normal;width:200px">AA<span></span> BB<br><span>CC </span>DD</div></div>
+<div class="row"><div id="blank-lines" class="sample actual" style="white-space:pre-line">AA
+   
+BB</div><div id="blank-lines-ref" class="sample reference" style="white-space:pre">AA
+
+BB</div></div>
+<div class="row"><div id="empty" class="sample actual" style="white-space:pre-line">   </div><div id="empty-ref" class="sample reference" style="white-space:normal"></div></div>
+<div class="row"><div id="inherit" class="sample actual" style="white-space:pre;"><span style="text-wrap-mode:wrap">AAA BBB CCC</span></div><div id="inherit-ref" class="sample reference" style="white-space:pre-wrap"><span>AAA BBB CCC</span></div></div>
