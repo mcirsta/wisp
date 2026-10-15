@@ -32,6 +32,82 @@ QuickJS checks pass in Release and sanitizer Debug; deterministic Qt tests cover
 the loader, cache/failures, resizing and navigation. See the linked plan for
 image counts, exact coverage and the broader APIs intentionally left separate.
 
+## eBihoreanul follow-up assessment (2026-10-15)
+
+Assessed after `00f7ab3b`, using the live homepage and the Beius fire article,
+the current unmodified `scripts.min_v202610152.js` bundle, and reduced local
+gallery probes. Release captures finish loading with readable main content and
+images. This is an assessment of remaining dependencies, not a claim that all
+site interactions work. Evidence is under `out/js-ebihoreanul/`.
+
+Recommended order:
+
+1. **DOM containment and the document's Window — implemented.** Previously,
+   neither `Node.contains()` nor `compareDocumentPosition()` was exposed, so
+   jQuery 1.7.1's Sizzle chose an always-false containment fallback:
+   `#foto_bihor_sidebar li img` found zero images although the native tag query
+   found one. Native `Node.contains()` now makes that selector find the image.
+   `Document.defaultView` returns the page's existing Window identity, or null
+   for cloned/inert documents without a browsing context. This is standard
+   browser behavior; the temporary diagnostic JS implementation is not shipped.
+2. **Resolved box/style measurements.** The gallery reads padding, margins,
+   borders, dimensions and position. Before the foundation change, jQuery's CSS
+   reads silently returned undefined; a 92px content-width test with 2px padding
+   and 1px borders reported width 98px because edge measurements were missing.
+   With `defaultView`, jQuery now reaches native computed-style reads; the first
+   main-bundle blocker is `position` in jQuery UI's offset feature probe.
+   `padding-left` and `display` are also confirmed unsupported reads.
+   The previous image batch deliberately implemented only the resolved values
+   needed by lazySizes. Extend the native CSSOM surface with a bounded set of
+   correctly resolved values, including display/position and box measurements.
+3. **Image construction and event-handler properties.** Fancybox's image path
+   uses `new Image()`, `onload`/`onerror` and width/height. The constructor and
+   handler properties are absent. Reuse the element-owned request/completion
+   machinery from the completed image batch instead of adding a separate loader.
+4. **Actual asynchronous requests, as a separate batch.** The site's gallery
+   links fetch `/ebh/display_gallery/...` through Fancybox AJAX; other widgets
+   also use requests. The old XHR stub still reports status 200 without making
+   a request or delivering callbacks. Complete gallery loading therefore needs
+   real request integration, including origin, cancellation and lifetime rules.
+   The first three groups alone do not promise a working full gallery.
+
+Lower priority: Cloudflare's email-decoding script reaches a cleanup expression
+using `document.currentScript` or `document.scripts`, which are absent. That
+exception follows the decoding call, so it is not evidence that all email
+decoding failed. Advertising, consent and push scripts also report errors; they
+are not prerequisites for the reading/gallery work above.
+
+The standards anchors are [DOM containment](https://dom.spec.whatwg.org/#dom-node-contains),
+[Document.defaultView](https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-document-defaultview),
+[CSSOM resolved values](https://drafts.csswg.org/cssom/#resolved-values), and
+[Image construction](https://html.spec.whatwg.org/multipage/embedded-content.html#dom-image).
+These findings refine the earlier cloneNode follow-up below: geometry,
+containment and defaultView are now available; the broader resolved-style
+surface remains the next step.
+
+The containment implementation reuses libdom's allocation-free parent walk,
+including detached trees and adopted nodes. Its native helper now accepts null
+and stops at an attribute's owner link, which is not a DOM parent edge. The old
+Duktape `Node::contains` used document-position comparisons; it was reviewed,
+but its binding/conversion logic was not copied. No renderer caches, generated
+binding changes or new runtime options were needed. Existing page-realm and
+document-retirement guards still apply.
+
+Regression tests cover nullable/invalid arguments, self/descendant relationships,
+separate documents, fragments, adoption/removal, SVG, attribute ownership,
+readonly defaultView identity and retired wrappers. The Qt clone test checks
+these relationships during parser-time and timer-driven insertion and compares
+the rendered result with static markup. The actual site's bundle confirms the
+selector correction; its gallery still requires the remaining steps above.
+The live homepage completes loading with readable main content and images.
+
+Validation: all 237 native QuickJS checks pass in Release and sanitizer Debug,
+as do the native tree/adoption/cloning suites. Qt clone, computed-style, geometry
+and lazy-image captures pass in both builds. Debug native checks include
+ASan/UBSan/LSan; the allocation-failure sweep needed `CK_TIMEOUT_MULTIPLIER=3`
+to avoid its 15-second test-harness timeout. Browser execution limits are
+unchanged. Qt uses `detect_leaks=0` for the existing platform-allocation policy.
+
 ## Current priority: basic JS that makes sites readable (2026-10-11)
 
 The user's priority is scripts that initialize pages and populate visible content.

@@ -236,6 +236,39 @@ START_TEST(test_text_replacement_allocation_failure)
 END_TEST
 #endif
 
+START_TEST(test_contains_attribute_ownership)
+{
+    dom_document *doc = NULL;
+    ck_assert_int_eq(
+        dom_implementation_create_document(DOM_IMPLEMENTATION_HTML, NULL, NULL, NULL, NULL, NULL, &doc), DOM_NO_ERR);
+    dom_node *root = make_element(doc, "div");
+    append_node((dom_node *)doc, root);
+    dom_string *name = NULL;
+    ck_assert_int_eq(dom_string_create((const uint8_t *)"id", 2, &name), DOM_NO_ERR);
+    ck_assert_int_eq(dom_element_set_attribute(root, name, name), DOM_NO_ERR);
+    dom_attr *attr = NULL;
+    ck_assert_int_eq(dom_element_get_attribute_node(root, name, &attr), DOM_NO_ERR);
+    ck_assert_ptr_nonnull(attr);
+    dom_element *owner = NULL;
+    ck_assert_int_eq(dom_attr_get_owner_element(attr, &owner), DOM_NO_ERR);
+    ck_assert_ptr_eq(owner, root);
+    dom_node_unref(owner);
+    bool contained = true;
+    ck_assert_int_eq(dom_node_contains(root, attr, &contained), DOM_NO_ERR);
+    ck_assert_msg(!contained, "An attribute's owner element is not its DOM parent");
+    ck_assert_int_eq(dom_node_contains(doc, attr, &contained), DOM_NO_ERR);
+    ck_assert_msg(!contained, "An owned attribute is not a document descendant");
+    ck_assert_int_eq(dom_node_contains(attr, attr, &contained), DOM_NO_ERR);
+    ck_assert_msg(contained, "Containment includes the attribute itself");
+    ck_assert_int_eq(dom_node_contains(root, NULL, &contained), DOM_NO_ERR);
+    ck_assert_msg(!contained, "Null is not a descendant");
+    dom_node_unref(attr);
+    dom_string_unref(name);
+    dom_node_unref(root);
+    dom_node_unref(doc);
+}
+END_TEST
+
 int main(void)
 {
     Suite *suite = suite_create("DOM tree editing");
@@ -244,6 +277,7 @@ int main(void)
     tcase_add_test(tc, test_document_collection_tracks_root);
     tcase_add_loop_test(tc, test_replace_all, 0, 4);
     tcase_add_test(tc, test_replace_all_validation);
+    tcase_add_test(tc, test_contains_attribute_ownership);
 #ifdef WISP_TEST_ALLOC_FAILURE
     tcase_add_test(tc, test_text_replacement_allocation_failure);
 #endif

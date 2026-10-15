@@ -176,7 +176,7 @@ static inline void dom_node_unref(dom_node *node)
 void _dom_node_unref_debug(dom_node *node, const char *file, int line);
 #define dom_node_unref(n) _dom_node_unref_debug((dom_node *)(n), __FILE__, __LINE__)
 
-/* Contains is non-virtual since it doesn't need to be */
+/* Inclusive tree containment; other may be NULL. Non-virtual. */
 
 dom_exception _dom_node_contains(struct dom_node_internal *node, struct dom_node_internal *other, bool *contains);
 #define dom_node_contains(n, o, c) _dom_node_contains((dom_node_internal *)(n), (dom_node_internal *)(o), (c))

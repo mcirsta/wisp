@@ -18,9 +18,13 @@ clone = section.replace('id="source"', 'id="copy"')
 script = '''function change(){
  const doc=document.cloneNode(true), source=doc.getElementById('source');
  const copy=source.cloneNode(true); copy.id='copy';
+ if(document.defaultView!==window || doc.defaultView!==null)throw Error('document window association');
+ if(!doc.contains(source) || document.contains(source) || doc.contains(copy))throw Error('cloned containment');
+ if(!copy.contains(copy.firstChild) || copy.contains(null))throw Error('detached containment');
  if(copy.ownerDocument!==doc || copy.isConnected)throw Error('clone ownership');
  document.body.appendChild(copy);
  if(copy.ownerDocument!==document || !copy.isConnected)throw Error('insertion adoption');
+ if(!document.contains(copy) || doc.contains(copy) || copy.ownerDocument.defaultView!==window)throw Error('adopted context');
  console.log('CLONE_INSERTED');
 }'''
 with tempfile.TemporaryDirectory(prefix='wisp-js-clone-') as tmp:

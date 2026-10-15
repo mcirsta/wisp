@@ -1551,6 +1551,7 @@ START_TEST(test_quickjs_dom_runtime_isolation)
     for (unsigned i = 0; i < 2; i++) {
         jsthread *thread = i == 0 ? dom_thread : second;
         assert_predicate(thread, "document.body instanceof HTMLElement && new XMLHttpRequest().readyState === 0 && "
+            "document.defaultView === window && "
             "document.body.childNodes instanceof NodeList && document.body.children instanceof HTMLCollection && "
             "document.body.childNodes[0] === document.body.children[0]",
             "runtime-local host classes");
@@ -1591,6 +1592,85 @@ static bool exec_dom_script(jsthread *thread, const char *script, const char *la
     return ok;
 }
 
+/* https://dom.spec.whatwg.org/#dom-node-contains */
+START_TEST(test_quickjs_node_contains)
+{
+    ck_assert(exec_dom_script(dom_thread,
+        "function check(ok,label){if(!ok)throw Error(label)}"
+        "function typeError(fn){try{fn()}catch(e){check(e instanceof TypeError,'exception type');return}throw Error('no TypeError')}"
+        "var root=document.getElementById('target'), text=root.firstChild, sibling=root.nextSibling;"
+        "check(Node.prototype.contains.length===1,'arity');"
+        "check(root.contains(root) && root.contains(text) && document.contains(text),'inclusive ancestors');"
+        "check(!text.contains(root) && !root.contains(sibling) && !sibling.contains(text),'other branches');"
+        "check(document.contains(document) && document.contains(document.firstChild),'document and doctype');"
+        "check(!root.contains(null) && !root.contains(undefined),'nullable argument');"
+        "typeError(()=>root.contains());"
+        "for(var x of [true,0,'x',{},Object.create(Node.prototype),new Proxy(root,{})]) {"
+        "typeError(()=>root.contains(x));typeError(()=>Node.prototype.contains.call(x,root))}"
+        "typeError(()=>Node.prototype.contains.call(null,null));"
+        "typeError(()=>root.contains({valueOf(){throw Error('must not convert')}}));"
+        "var detached=root.cloneNode(true);"
+        "check(detached.contains(detached.firstChild) && !document.contains(detached),'detached subtree');"
+        "var fragment=document.createDocumentFragment();fragment.appendChild(detached);"
+        "check(fragment.contains(detached.firstChild) && !detached.contains(fragment),'fragment ancestry');"
+        "var copy=document.cloneNode(true);"
+        "check(copy.contains(copy.body) && !document.contains(copy.body) && !copy.contains(text),'separate document');"
+        "copy.body.appendChild(detached);"
+        "check(copy.contains(detached.firstChild) && !fragment.contains(detached),'adoption updates containment');"
+        "copy.body.removeChild(detached);"
+        "check(!copy.contains(detached) && detached.contains(detached.firstChild),'removal updates containment');"
+        "check(document.getElementById('svg').contains(document.getElementById('svgText')),'SVG ancestry');"
+        /* The site's Sizzle branch filters a native tag query through contains. */
+        "var list=document.createElement('ul');list.innerHTML='<li><img></li>';"
+        "check(Array.from(list.getElementsByTagName('img')).filter(n=>list.contains(n.parentNode)).length===1,'gallery filter');",
+        "Node.contains tree relationships and Web IDL"));
+    ck_assert_uint_eq(dom_thread->dom_changes, 0);
+}
+END_TEST
+
+/* https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-document-defaultview */
+START_TEST(test_quickjs_document_default_view)
+{
+    ck_assert(exec_dom_script(dom_thread,
+        "function check(ok,label){if(!ok)throw Error(label)}"
+        "var descriptor=Object.getOwnPropertyDescriptor(Document.prototype,'defaultView');"
+        "check(descriptor.enumerable && descriptor.configurable && descriptor.set===undefined,'readonly descriptor');"
+        "check(document.defaultView===window && document.body.ownerDocument.defaultView===globalThis,'associated window');"
+        "check(document.defaultView.document===document && document.defaultView.getComputedStyle===getComputedStyle,'window identity');"
+        "var copy=document.cloneNode(true), empty=document.cloneNode();"
+        "check(copy.defaultView===null && empty.defaultView===null && copy.body.ownerDocument.defaultView===null,'no browsing context');"
+        "copy.body.appendChild(document.createElement('span'));"
+        "check(copy.body.lastChild.ownerDocument.defaultView===null,'adopted node uses destination document');"
+        "document.defaultView=null;check(document.defaultView===window,'readonly assignment');"
+        "for(var bad of [null,{},document.body,Object.create(Document.prototype)]) {"
+        "try{descriptor.get.call(bad);throw Error('bad receiver accepted')}catch(e){check(e instanceof TypeError,'receiver brand')}}"
+        "var saved=globalThis;globalThis={};check(document.defaultView===saved,'not a mutable global lookup');saved.globalThis=saved;",
+        "Document.defaultView browsing-context association"));
+    ck_assert_uint_eq(dom_thread->dom_changes, 0);
+}
+END_TEST
+
+START_TEST(test_quickjs_node_context_retirement)
+{
+    JSContext *ctx = dom_thread->ctx;
+    JSValue global = JS_GetGlobalObject(ctx), doc = JS_GetPropertyStr(ctx, global, "document");
+    JSValue contains = JS_GetPropertyStr(ctx, doc, "contains");
+    js_closethread(dom_thread);
+    for (unsigned i = 0; i < 2; i++) {
+        JSValue result = i == 0 ? JS_GetPropertyStr(ctx, doc, "defaultView") : JS_Call(ctx, contains, doc, 1, &doc);
+        ck_assert_msg(JS_IsException(result), "Closed document accepted %s", i ? "contains" : "defaultView");
+        JSValue error = JS_GetException(ctx), name = JS_GetPropertyStr(ctx, error, "name");
+        const char *text = JS_ToCString(ctx, name);
+        ck_assert_str_eq(text, "InvalidStateError");
+        JS_FreeCString(ctx, text);
+        JS_FreeValue(ctx, name);
+        JS_FreeValue(ctx, error);
+    }
+    JS_FreeValue(ctx, contains);
+    JS_FreeValue(ctx, doc);
+    JS_FreeValue(ctx, global);
+}
+END_TEST
 #include "test_quickjs_style.inc"
 #include "test_quickjs_clone.inc"
 #include "test_quickjs_lazy_images.inc"
@@ -4124,6 +4204,9 @@ Suite *quickjs_suite(void)
     TCase *tc_dom = tcase_create("Real DOM");
     tcase_add_checked_fixture(tc_dom, setup_dom, teardown_dom);
     tcase_add_test(tc_dom, test_quickjs_document);
+    tcase_add_test(tc_dom, test_quickjs_node_contains);
+    tcase_add_test(tc_dom, test_quickjs_document_default_view);
+    tcase_add_test(tc_dom, test_quickjs_node_context_retirement);
     add_style_tests(tc_dom);
     add_clone_tests(tc_dom);
     add_lazy_image_tests(tc_dom);

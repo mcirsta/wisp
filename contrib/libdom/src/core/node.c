@@ -359,10 +359,9 @@ void _dom_node_finalise(dom_node_internal *node)
 dom_exception _dom_node_contains(struct dom_node_internal *node, struct dom_node_internal *other, bool *contains)
 {
     assert(node != NULL);
-    assert(other != NULL);
     assert(contains != NULL);
 
-    if (node->owner != other->owner) {
+    if (other == NULL || node->owner != other->owner) {
         *contains = false;
         return DOM_NO_ERR;
     }
@@ -372,6 +371,10 @@ dom_exception _dom_node_contains(struct dom_node_internal *node, struct dom_node
             *contains = true;
             return DOM_NO_ERR;
         }
+        /* Attr's internal parent is its owner element, not a DOM tree edge.
+         * Containment includes the attribute itself but must not follow it. */
+        if (other->type == DOM_ATTRIBUTE_NODE)
+            break;
         other = other->parent;
     }
 

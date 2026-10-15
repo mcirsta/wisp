@@ -28,7 +28,8 @@ enum node_property {
     DOCUMENT_ELEMENT,
     HEAD,
     BODY,
-    READY_STATE
+    READY_STATE,
+    DEFAULT_VIEW
 };
 
 static JSValue wrap_result(JSContext *ctx, JSValueConst object, struct qjs_dom_node *self, dom_node *node)
@@ -115,6 +116,10 @@ static JSValue node_get(JSContext *ctx, JSValueConst object, int property)
     dom_node *node = NULL;
     bool nullable = true;
     switch (property) {
+    case DEFAULT_VIEW:
+        /* Only this realm's displayed Document has a browsing context.
+         * Clones and template owners have none, even if they contain nodes. */
+        return qjs_dom_is_active_document(ctx, self->node) ? JS_GetGlobalObject(ctx) : JS_NULL;
     case READY_STATE: {
         jsthread *thread = JS_GetContextOpaque(ctx);
         html_content *html = thread->doc_priv;
@@ -352,6 +357,23 @@ static JSValue node_has_children(JSContext *ctx, JSValueConst object, int argc, 
     return err == DOM_NO_ERR ? JS_NewBool(ctx, result) : qjs_dom_exception(ctx, err);
 }
 
+static JSValue node_contains(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv)
+{
+    struct qjs_dom_node *self = qjs_dom_get(ctx, object, 0), *other = NULL;
+    if (self == NULL)
+        return JS_EXCEPTION;
+    if (argc == 0)
+        return JS_ThrowTypeError(ctx, "contains requires a Node or null");
+    if (!JS_IsNull(argv[0]) && !JS_IsUndefined(argv[0])) {
+        other = qjs_dom_get(ctx, argv[0], 0);
+        if (other == NULL)
+            return JS_EXCEPTION;
+    }
+    bool result;
+    dom_exception err = dom_node_contains(self->node, other != NULL ? other->node : NULL, &result);
+    return err == DOM_NO_ERR ? JS_NewBool(ctx, result) : qjs_dom_exception(ctx, err);
+}
+
 #define GET(name, property)                                                                                            \
     JS_CGETSET_MAGIC_DEF2(name, node_get, NULL, property, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE)
 #define ACCESS(name, property)                                                                                         \
@@ -380,6 +402,7 @@ int qjs_dom_install_properties(JSContext *ctx, JSValue *prototypes)
         GET("ownerDocument", OWNER_DOCUMENT),
         GET("isConnected", CONNECTED),
         JS_CFUNC_DEF2("hasChildNodes", 0, node_has_children, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("contains", 1, node_contains, JS_PROP_C_W_E),
     };
     static const JSCFunctionListEntry element[] = {
         GET("tagName", TAG_NAME),
@@ -393,6 +416,7 @@ int qjs_dom_install_properties(JSContext *ctx, JSValue *prototypes)
     };
     static const JSCFunctionListEntry document[] = {
         GET("readyState", READY_STATE),
+        GET("defaultView", DEFAULT_VIEW),
         GET("documentElement", DOCUMENT_ELEMENT),
         GET("head", HEAD),
         GET("body", BODY),
