@@ -149,6 +149,7 @@ union content_msg_data {
         /** \todo Consider getting screen_width, screen_height too. */
         unsigned *viewport_width;
         unsigned *viewport_height;
+        bool include_scrollbars; /**< CSSOM Window dimensions, rather than layout area. */
     } getdims;
 
     /**

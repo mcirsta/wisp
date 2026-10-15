@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
- * Same-document node creation and tree edits. libdom owns tree validity and
+ * Node creation, cloning and tree edits. libdom owns tree validity and
  * links; this layer owns Web IDL conversion, wrappers and render attribution.
  */
 #include "dom.h"
@@ -87,6 +87,29 @@ static JSValue create(JSContext *ctx, JSValueConst object, int argc, JSValueCons
     dom_string_unref(text);
     JSValue result = err == DOM_NO_ERR ? qjs_dom_wrap(ctx, object, node) : qjs_dom_exception(ctx, err);
     dom_node_unref(node);
+    return result;
+}
+
+/* DOM's cloning steps are native, including template contents and form state.
+ * A clone is detached: copying alone does not invalidate the rendered page. */
+static JSValue clone_node(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv)
+{
+    struct qjs_dom_node *self = qjs_dom_get(ctx, object, 0);
+    if (self == NULL || !qjs_execution_check(ctx))
+        return JS_EXCEPTION;
+    bool deep = argc != 0 && JS_ToBool(ctx, argv[0]);
+    dom_node *copy = NULL;
+    dom_exception err = dom_node_clone_node(self->node, deep, &copy);
+    JSValue owner = qjs_dom_owner(ctx, object, self);
+    JSValue result = err != DOM_NO_ERR ? qjs_dom_exception(ctx, err)
+        : !qjs_execution_check(ctx)    ? JS_EXCEPTION
+                                       : qjs_dom_wrap(ctx, owner, copy);
+    JS_FreeValue(ctx, owner);
+    dom_node_unref(copy);
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    struct qjs_dom_node *wrapped = JS_GetOpaque(result, thread->heap->node_class);
+    qjs_trace(ctx, "dom.clone", "source=%" PRIu64 " copy=%" PRIu64 " deep=%d result=%u wrapped=%d",
+        self->id, wrapped != NULL ? wrapped->id : 0, deep, err, wrapped != NULL);
     return result;
 }
 
@@ -183,6 +206,7 @@ int qjs_dom_install_tree(JSContext *ctx, JSValue *prototypes)
         METHOD("createDocumentFragment", 0, create, CREATE_FRAGMENT),
     };
     static const JSCFunctionListEntry node[] = {
+        JS_CFUNC_DEF2("cloneNode", 0, clone_node, JS_PROP_C_W_E),
         METHOD("appendChild", 1, mutate, APPEND),
         METHOD("insertBefore", 2, mutate, INSERT),
         METHOD("replaceChild", 2, mutate, REPLACE),

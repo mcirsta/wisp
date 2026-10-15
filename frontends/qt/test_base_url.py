@@ -53,7 +53,7 @@ class HTTP(http.server.BaseHTTPRequestHandler):
         elif self.path.endswith('/page.css'):
             self.respond('#marker { width:200px;height:37px;background:#cfc; }', 'text/css')
         elif self.path.endswith('/page.js'):
-            self.respond('console.log("BASE_SCRIPT_PASS");', 'text/javascript')
+            self.respond('document.documentElement.className="base-script-pass";', 'text/javascript')
         elif self.path.endswith('/pixel.svg'):
             self.respond('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">'
                          '<rect width="10" height="10" fill="green"/></svg>', 'image/svg+xml')
@@ -90,7 +90,13 @@ try:
                 assert prefix + suffix in requests, (name, js, suffix, requests)
                 assert not any(path.endswith('/' + suffix) and path != prefix + suffix for path in requests), requests
             if js:
-                assert 'Console: BASE_SCRIPT_PASS' in log, (name, log[-10000:])
+                # Check execution in the initial DOM, before native submission
+                # navigates away. Release builds deliberately disable logging.
+                first = json.loads((dest / 'steps.json').read_text())[0]
+                marker = next(e for e in first['elements'] if e['id'] == 'marker')
+                assert marker['boxes'] and any(
+                    a['node']['tag'] == 'html' and a['node']['class'] == 'base-script-pass'
+                    for a in marker['boxes'][0]['ancestors']), (name, first)
             assert 'JavaScript exception in' not in log, (name, log[-10000:])
 finally:
     server.shutdown()

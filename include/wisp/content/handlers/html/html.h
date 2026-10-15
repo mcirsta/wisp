@@ -98,6 +98,7 @@ struct content_html_object {
     struct content *parent; /**< Parent document */
     struct content_html_object *next; /**< Next in chain */
 
+    struct html_image *image; /**< Element-owned img request lifecycle, or NULL for other objects. */
     struct hlcache_handle *content; /**< Content, or 0. */
     struct box *box; /**< Node in box tree containing it, or NULL while hidden. */
     struct dom_node *node; /**< DOM identity retained across box reconstruction. */
@@ -227,5 +228,8 @@ struct content_html_object *html_get_objects(struct hlcache_handle *h, unsigned 
  * get the offset within the docuemnt of a fragment id
  */
 bool html_get_id_offset(struct hlcache_handle *h, lwc_string *frag_id, int *x, int *y);
+
+/** Queue a CSSOM View document scroll event after an actual viewport change. */
+void html_viewport_scroll(struct hlcache_handle *h);
 
 #endif

@@ -22,6 +22,9 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
 /* Internal scalar formatter for already validated numeric component tokens.
  * A unitless length becomes px; specified units/precision never come from bytecode. */
 css_error css__declaration_numeric_serialize(const css_declaration_token *token, bool length_value, lwc_string **out);
+/* CSSOM number formatting for the renderer's already-computed fixed values.
+ * Specified declarations keep their original decimal precision above. */
+css_error css__declaration_fixed_serialize(css_fixed value, lwc_string **out);
 
 /* Divide an accepted decimal by 10^places before rounding and replace its
  * unit (NULL for a number). Shared by scale percentages and millisecond times. */

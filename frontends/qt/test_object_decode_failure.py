@@ -62,9 +62,9 @@ with tempfile.TemporaryDirectory(prefix="wisp-object-decode-") as tmp:
                 assert bool(elements[f'fallback-{i}']['boxes']) == opened, (mode, index, i)
             assert not elements['forbidden']['boxes'], (mode, index)
             assert step['active_resources'] == 0, (mode, index, step['active_resources'])
-            # Two objects, the image's preload + layout request, background,
+            # Two objects, one element-owned image request, background,
             # and the successful object. Rebuilding must not add requests.
-            assert step['resource_count'] == steps[0]['resource_count'] == 6, (mode, index, step['resource_count'])
+            assert step['resource_count'] == steps[0]['resource_count'] == 5, (mode, index, step['resource_count'])
             if index == 2:
                 assert elements['fallback-0']['boxes'][0]['highlighted_fragments'] == 1, (mode, index)
             if index == 3:

@@ -65,11 +65,13 @@ static script_handler_t *select_script_handler(content_type ctype)
     }
 }
 
-/* Only author sheets already discovered by the parser block classic scripts.
- * Later sheets cannot be discovered while a parser-blocking script waits. */
+/* UA sheets arrive through the cache too; they must be available when script
+ * first asks for layout. For author sheets, only those already discovered by
+ * the parser block classic scripts. Later sheets cannot be discovered while
+ * a parser-blocking script waits. */
 static bool html_script_styles_blocked(html_content *html)
 {
-    for (unsigned i = STYLESHEET_START; i < html->stylesheet_count; i++) {
+    for (unsigned i = STYLESHEET_BASE; i < html->stylesheet_count; i++) {
         struct html_stylesheet *sheet = &html->stylesheets[i];
         if (sheet->unused)
             continue;

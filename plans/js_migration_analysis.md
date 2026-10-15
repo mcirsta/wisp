@@ -18,6 +18,20 @@ delivery are implemented for the existing parser/resource model. Native SubmitEv
 is implemented; validation and FormDataEvent remain incomplete. Earlier increment
 notes describe their historical scope; the current status is recorded below.
 
+## Completed bounded target: Tion/Bihon article images (2026-10-15)
+
+The [lazy-image plan](js-lazy-images.md) defines the finish line and implementation
+sequence: initial and scrolled image loading, correct sizing and completion.
+Only unrelated script failures that directly block those images enter this batch.
+Loader initialization, element-owned image requests/completion, responsive
+source selection, geometry, resolved style reads and native scroll/resize
+notifications are implemented and tested. The unmodified lazySizes loader uses
+its normal viewport path. Saved-page sweeps and live pages pass at desktop and
+narrow widths, including initial/scrolled images and completion. All 234 native
+QuickJS checks pass in Release and sanitizer Debug; deterministic Qt tests cover
+the loader, cache/failures, resizing and navigation. See the linked plan for
+image counts, exact coverage and the broader APIs intentionally left separate.
+
 ## Current priority: basic JS that makes sites readable (2026-10-11)
 
 The user's priority is scripts that initialize pages and populate visible content.
@@ -3028,9 +3042,74 @@ not claim complete initialization or interactivity. The saved page also shows
 an external iframe error, outside this style change. Captures, exception excerpts
 and test summaries are under `out/js-review-2026-10-13/inline-style/`.
 
-Next is native-backed `Node.cloneNode`, with distinct wrapper identity,
-shallow/deep semantics, element-specific cloning state and lifetime tests. Keep
-this separate from the now-closed inline-style prerequisite checklist.
+The next increment implements native-backed `Node.cloneNode`, described below;
+the inline-style prerequisite checklist remains closed.
+
+### Node.cloneNode and native document ownership (2026-10-14)
+
+`Node.cloneNode()` is now enabled with optional Web IDL boolean conversion,
+shallow/deep copying, independent wrappers and native DOM exceptions. The old
+Duktape `Node.bnd` at `80c4aca5f50180d14377a773fb731df6ab272497` supplied the
+libdom call/reference-release pattern; its silent failure handling was not
+retained. Behavior follows the [DOM cloning algorithm](https://dom.spec.whatwg.org/#concept-node-clone)
+and HTML's [script](https://html.spec.whatwg.org/#script-processing-model) and
+[template](https://html.spec.whatwg.org/#the-template-element) cloning steps.
+
+The underlying fixes are shared native behavior:
+
+- libdom now clones HTML and core Documents, preserving modeled URL, document
+  type and quirks mode, with a fresh owner for descendants. It does not copy
+  event hosts, default actions, live collections or source template owners.
+- Script copies previously left execution flags uninitialized. They now preserve
+  already-started and initialize the remaining flags as for a new script.
+  Existing input/textarea state and template-content cloning paths are reused.
+- Cloning no longer treats the source's mutation-notification guard as a ban on
+  making an independent copy. A native notification regression covers this.
+- Insertion, replacement and replace-all adopt foreign nodes after validation.
+  Preparation failures preserve the original trees. This replaces the previous
+  explicit WrongDocumentError restriction in shared libdom tree operations.
+
+QuickJS uses one identity/prototype registry per page realm, including its cloned
+and inert native documents. Native ownerDocument is queried dynamically, so
+adoption retains wrapper identity without stale ownership. isConnected recognizes
+any Document root, while rendering invalidation still checks only the displayed
+HTML document. Cloned documents have no Window event parent and report complete
+readiness. Markup parsing/serialization disables scripting in documents without a
+browsing context; inline-style parsing uses the node's document context.
+The existing strong wrapper cache/lifetime policy is unchanged.
+
+Copies do not transfer JS expandos or registered listeners. Attributes, text,
+comments, document types, SVG namespaces, fragments and template contents retain
+independent native state. `dom.clone` traces identify source/copy nodes and depth;
+cloning alone requests no render. Insertion uses the existing coalesced DOM
+mutation path. This adds neither dynamic script execution nor shadow/custom
+element support, and does not change native allocation/execution limits.
+
+Validation covers native document metadata/lifetime, script flags, template
+adoption, invalid insertion, allocation-failure rollback, JS boolean/receiver
+semantics, independent state, event isolation, GC/retirement and wrapper OOM.
+Qt captures compare immediate and timer-driven clone insertion with equivalent
+static markup. Fourteen selected Release suites and eighteen Debug suites pass,
+including the full QuickJS suite and native DOM tests. Native Debug ASan/UBSan/LSan
+checks are clean; Qt captures run with leak detection disabled. Four older Qt JS suites require
+Debug console traces and fail their log assertions in Release; they are verified
+in Debug. The new clone capture and the existing style capture verify pixels in
+both configurations. GTK and Windows were not built.
+
+Both saved `scripts.min_v202610062.js` and live `scripts.min_v202610142.js`
+execute five successful clone calls and get past the old line 32 cloning probe.
+Their next main-bundle exception is line 33, column 46968 in jQuery's offset
+fallback: `k.position` is read from undefined. The fallback expects
+`document.defaultView.getComputedStyle()` or legacy `currentStyle`; Wisp lacks
+that computed-style/geometry surface, and lacks getBoundingClientRect(), which
+would select jQuery's modern offset path. A subsequent ready callback also calls an
+unavailable function. Captures finish loading and the live main content remains
+readable, but complete site initialization is not claimed. Evidence is under
+`out/js-review-2026-10-14/clone-node/`.
+
+Next investigate a bounded, standards-based computed-style/geometry slice needed
+by this offset path. Do not add legacy currentStyle or fabricated geometry merely
+to satisfy jQuery's feature detection.
 
 ## Assessment
 
@@ -3092,8 +3171,8 @@ unless stated otherwise.
 | Promise/async continuations | The outer script or timer entry drains FIFO jobs under the same deadline; aborted entries discard their pending jobs | Promise, `await` and engine `queueMicrotask` callbacks progress; this is not yet a complete browser event loop |
 | Timers | `timers.c`: per-document ordered queue on the frontend scheduler, callback arguments/string handlers, shared cancellation IDs and nesting delays | Real `setTimeout`/`setInterval`; callbacks and their checkpoints share execution limits; document retirement cancels them |
 | JS diagnostics | Optional `js_trace` records document/entry IDs, script sources, timer causality, navigation, exposed node IDs, actual DOM operations and coalesced render requests | Separates supported JS host effects from static processing; this is not complete paint attribution |
-| Document/nodes | `dom.c`/`document.c`/`tree.c`/`collections.c`: real libdom wrappers with stable identity, roots, ID lookup, traversal, live `childNodes`/`children`, tag/namespace queries and element/text/comment/fragment factories | Document-lifetime wrapper ownership and native reference cleanup are tested; selectors, class-name queries, document convenience collections, namespace-aware creation and cross-document operations are not exposed |
-| Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, text/data, `innerHTML` and append/insert/replace/remove; connected edits request a full restyle after the entry/checkpoint | Changes affect boxes and pixels, including moves into detached trees; `style` remains omitted; dynamic stylesheet lifecycle remains incomplete |
+| Document/nodes | `dom.c`/`document.c`/`tree.c`/`collections.c`: real libdom wrappers with stable identity, roots, ID lookup, traversal, live `childNodes`/`children`, tag/namespace queries and element/text/comment/fragment factories | Realm-lifetime wrapper ownership, cloned Documents and native reference cleanup are tested; selectors, class-name queries, document convenience collections, namespace-aware creation, importNode/adoptNode and cross-realm operations are not exposed; cloneNode and insertion adoption within this realm are supported |
+| Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, text/data, `innerHTML`, live `style`, cloneNode and append/insert/replace/remove; connected edits request a full restyle after the entry/checkpoint | Changes affect boxes and pixels, including moves into detached trees; computed styles/geometry remain absent; dynamic stylesheet lifecycle remains incomplete |
 | Events | Event/CustomEvent/UIEvent/core MouseEvent/PointerEvent/SubmitEvent values; shared script/native primary-click and SubmitEvent dispatch; checkable input/change delivery | Keyboard, other pointer/mouse events, full form submission callbacks and handler attributes remain pending |
 | Cancellation | `abort.c`: AbortController, AbortSignal state/reason, throwIfAborted, static abort, onabort and the listener signal option | Listener cancellation uses private abort steps before the public event; timeout, any and network integration remain absent |
 | Lifecycle information | `readyState`, trusted `readystatechange`, `DOMContentLoaded` and Window `load`; frame/resource waits and DOM update integration | Handler properties/attributes, pageshow/pagehide, navigation timing and a complete document-abort lifecycle remain pending |

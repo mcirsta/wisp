@@ -1570,7 +1570,31 @@ static JSValue close_dom_during_conversion(JSContext *ctx, JSValueConst object, 
     return JS_UNDEFINED;
 }
 
+/* DOM binding tests report their JS assertion label even when logging is off. */
+static bool exec_dom_script(jsthread *thread, const char *script, const char *label)
+{
+    size_t length = strlen(script) + 150;
+    char *wrapped = malloc(length);
+    ck_assert_ptr_nonnull(wrapped);
+    snprintf(wrapped, length, "try{%s}catch(e){globalThis.domTestFailure=String(e);throw e}", script);
+    bool ok = exec_script(thread, wrapped, label);
+    free(wrapped);
+    if (!ok) {
+        JSValue global = JS_GetGlobalObject(thread->ctx);
+        JSValue reason = JS_GetPropertyStr(thread->ctx, global, "domTestFailure");
+        const char *text = JS_ToCString(thread->ctx, reason);
+        fprintf(stderr, "%s: %s\n", label, text != NULL ? text : "evaluation failed");
+        JS_FreeCString(thread->ctx, text);
+        JS_FreeValue(thread->ctx, reason);
+        JS_FreeValue(thread->ctx, global);
+    }
+    return ok;
+}
+
 #include "test_quickjs_style.inc"
+#include "test_quickjs_clone.inc"
+#include "test_quickjs_lazy_images.inc"
+#include "test_quickjs_view_events.inc"
 
 START_TEST(test_quickjs_dom_conversion_retirement)
 {
@@ -4101,6 +4125,9 @@ Suite *quickjs_suite(void)
     tcase_add_checked_fixture(tc_dom, setup_dom, teardown_dom);
     tcase_add_test(tc_dom, test_quickjs_document);
     add_style_tests(tc_dom);
+    add_clone_tests(tc_dom);
+    add_lazy_image_tests(tc_dom);
+    add_view_event_tests(tc_dom);
     tcase_add_test(tc_dom, test_quickjs_dom_attributes);
     tcase_add_test(tc_dom, test_quickjs_dom_text);
     tcase_add_test(tc_dom, test_quickjs_dom_conversion);

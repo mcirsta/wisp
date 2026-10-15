@@ -686,6 +686,7 @@ void NS_Widget::scrollTo(int x, int y)
     }
     m_xoffset = x;
     m_yoffset = y;
+    browser_window_scroll_changed(m_bw);
 #ifdef WISP_QT_CAPTURE
     (reuse ? m_scroll_blits : m_scroll_repaints)++;
 #endif

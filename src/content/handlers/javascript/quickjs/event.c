@@ -260,6 +260,56 @@ fail_object:
     return JS_EXCEPTION;
 }
 
+/* DOM createEvent's alias table, restricted to interfaces we expose. Creating
+ * a base Event for an unknown interface would falsely advertise support. */
+JSValue qjs_document_create_event(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv)
+{
+    if (qjs_dom_get(ctx, object, DOM_DOCUMENT_NODE) == NULL)
+        return JS_EXCEPTION;
+    if (argc == 0)
+        return JS_ThrowTypeError(ctx, "createEvent requires an interface name");
+    dom_string *name = qjs_dom_string(ctx, argv[0], false);
+    if (name == NULL)
+        return JS_EXCEPTION;
+    enum qjs_event_kind kind = QJS_EVENT_CLASSES;
+    static const struct {
+        const char *name;
+        enum qjs_event_kind kind;
+    } aliases[] = {{"event", QJS_EVENT}, {"events", QJS_EVENT}, {"htmlevents", QJS_EVENT},
+        {"svgevents", QJS_EVENT}, {"customevent", QJS_CUSTOM_EVENT}, {"uievent", QJS_UI_EVENT},
+        {"uievents", QJS_UI_EVENT}, {"mouseevent", QJS_MOUSE_EVENT}, {"mouseevents", QJS_MOUSE_EVENT}};
+    const char *bytes = dom_string_data(name);
+    size_t length = dom_string_byte_length(name);
+    for (unsigned i = 0; i < sizeof(aliases) / sizeof(*aliases); i++) {
+        if (strlen(aliases[i].name) != length)
+            continue;
+        size_t j;
+        for (j = 0; j < length; j++) {
+            unsigned char c = bytes[j];
+            if (c >= 'A' && c <= 'Z')
+                c += 'a' - 'A';
+            if (c != (unsigned char)aliases[i].name[j])
+                break;
+        }
+        if (j == length) {
+            kind = aliases[i].kind;
+            break;
+        }
+    }
+    dom_string_unref(name);
+    /* String conversion may retire the document. No native references survive
+     * it, and the prototype comes from our realm rather than a page constructor. */
+    if (qjs_dom_get(ctx, object, DOM_DOCUMENT_NODE) == NULL)
+        return JS_EXCEPTION;
+    if (kind == QJS_EVENT_CLASSES)
+        return qjs_dom_exception(ctx, DOM_NOT_SUPPORTED_ERR);
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    JSValue value = qjs_event_allocate(ctx, JS_NewObjectClass(ctx, thread->heap->event_class[kind]), kind, false);
+    if (!JS_IsException(value))
+        dom_event_set_is_trusted(qjs_event_get(ctx, value)->native, false);
+    return value;
+}
+
 JSValue qjs_event_create(JSContext *ctx, const char *type)
 {
     jsthread *thread = JS_GetContextOpaque(ctx);

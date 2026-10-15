@@ -196,6 +196,9 @@ typedef struct html_content {
     enum html_document_readiness readiness;
     bool dom_content_loaded; /**< DOMContentLoaded has been dispatched. */
     bool lifecycle_pending, lifecycle_running; /**< Queued/running document lifecycle task. */
+    struct html_scroll_event *scroll_events, *scroll_events_tail;
+    bool view_events_pending, resize_event_pending, view_dimensions_valid;
+    unsigned view_width, view_height; /**< Last viewport dimensions including native scrollbars. */
     bool conversion_begun; /**< Whether or not the conversion has begun */
     bool conversion_restart_pending; /**< Whether a restart is pending */
     unsigned int scripts_active; /**< Number of script fetches currently active */
@@ -246,6 +249,10 @@ typedef struct html_content {
 
     /** Whether an initial layout has been done */
     bool had_initial_layout;
+    /** A synchronous CSSOM read may build layout before parsing has finished. */
+    bool layout_syncing;
+    bool layout_provisional;
+    bool layout_styles_dirty;
 
     /** Whether scripts are enabled for this content */
     bool enable_scripting;
@@ -303,6 +310,7 @@ typedef struct html_content {
     unsigned int num_objects;
     /** List of objects. */
     struct content_html_object *object_list;
+    unsigned images_active; /**< Image updates, requests and queued completion events. */
     /** Forms, in reverse order to document. */
     struct form *forms;
     /** Hash table of imagemaps. */
@@ -401,6 +409,8 @@ extern bool html_redraw_debug;
 
 /* in html/html.c */
 void html_request_restyle(html_content *html);
+/** Update layout for a synchronous DOM read, without pumping tasks or I/O. */
+nserror html_update_layout(html_content *html);
 void html_request_checked_restyle(html_content *html, dom_node *node);
 
 /**
@@ -566,5 +576,9 @@ extern struct dom_string *html_dom_string_polygon;
 extern struct dom_string *html_dom_string_text_javascript;
 extern struct dom_string *html_dom_string_type;
 extern struct dom_string *html_dom_string_src;
+
+/* Refresh viewport/media units without layout or script execution. */
+void html_get_dimensions(html_content *html);
+void html_get_viewport_context(html_content *html, css_unit_ctx *units, css_media *media);
 
 #endif

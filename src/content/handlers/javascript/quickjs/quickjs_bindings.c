@@ -798,9 +798,9 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
 /* Shared host dispatch scope for input, submission and lifecycle callbacks. Event creation
  * uses captured interfaces and native values, never page constructors/getters. */
 static bool js_fire_native_event(
-    jsthread *thread, dom_node *target, dom_string *type, const struct js_mouse_event *mouse, dom_node *submitter)
+    jsthread *thread, dom_node *target, dom_string *type, const struct js_mouse_event *mouse, dom_node *submitter, bool plain)
 {
-    if (thread == NULL || thread->closed || target == NULL)
+    if (thread == NULL || thread->closed || (target == NULL && !plain))
         return false;
     qjs_thread_ref(thread);
     /* Reserve one deadline without leaving a JS execution frame on the stack:
@@ -815,37 +815,45 @@ static bool js_fire_native_event(
         bool submit = dom_string_isequal(type, corestring_dom_submit);
         bool load = dom_string_isequal(type, corestring_dom_load);
         bool dom_ready = dom_string_isequal(type, corestring_dom_DOMContentLoaded);
-        bool lifecycle = load || dom_ready || dom_string_isequal(type, corestring_dom_readystatechange);
+        html_content *html = thread->doc_priv;
+        bool lifecycle = html != NULL && target == (dom_node *)html->document &&
+            (load || dom_ready || dom_string_isequal(type, corestring_dom_readystatechange));
         qjs_trace(ctx,
             lifecycle    ? "document.dispatch"
                 : submit ? "form.dispatch"
+                : plain  ? (target == NULL ? "window.dispatch" : "element.dispatch")
                          : "input.dispatch",
             "type=%.*s origin=browser", (int)dom_string_byte_length(type), dom_string_data(type));
         JSValue global = JS_GetGlobalObject(ctx);
         /* document is an unforgeable, readonly own property of Window. */
         JSValue document = JS_GetPropertyStr(ctx, global, "document");
         JS_FreeValue(ctx, global);
-        JSValue object = JS_IsException(document) ? JS_EXCEPTION : qjs_dom_wrap(ctx, document, target);
+        JSValue object = JS_IsException(document) ? JS_EXCEPTION
+            : target == NULL                     ? JS_GetGlobalObject(ctx)
+                                                 : qjs_dom_wrap(ctx, document, target);
         JSValue event = JS_EXCEPTION;
         if (!JS_IsException(object)) {
-            if (lifecycle) {
+            if (plain) {
                 event = qjs_event_allocate(
                     ctx, JS_NewObjectClass(ctx, thread->heap->event_class[QJS_EVENT]), QJS_EVENT, false);
                 if (!JS_IsException(event))
-                    dom_event_init(qjs_event_get(ctx, event)->native, type, dom_ready, false);
+                    dom_event_init(qjs_event_get(ctx, event)->native, type,
+                        (lifecycle && dom_ready) || (html != NULL && target == (dom_node *)html->document &&
+                            dom_string_isequal(type, corestring_dom_scroll)), false);
             } else {
                 event = submit ? qjs_native_submit_event(ctx, type, document, submitter)
                                : qjs_native_input_event(ctx, type, mouse);
             }
         }
         JSValue result = JS_IsException(event) ? JS_EXCEPTION
-            : load                             ? qjs_event_target_dispatch_load(ctx, document, event)
+            : load && lifecycle                ? qjs_event_target_dispatch_load(ctx, document, event)
                                                : qjs_event_target_dispatch(ctx, object, event, false);
         accepted = !JS_IsException(result) && JS_ToBool(ctx, result);
         if (JS_IsException(result))
             qjs_report_exception(thread,
                 lifecycle    ? "document-lifecycle"
                     : submit ? "native-submit"
+                    : plain  ? "element-resource"
                              : "native-input",
                 thread->heap->interrupted);
         JS_FreeValue(ctx, result);
@@ -859,14 +867,24 @@ static bool js_fire_native_event(
 }
 
 /* exported interfaces documented in js.h */
+bool js_fire_element_event(jsthread *thread, dom_node *target, dom_string *type)
+{
+    return js_fire_native_event(thread, target, type, NULL, NULL, true);
+}
+
+bool js_fire_window_event(jsthread *thread, dom_string *type)
+{
+    return js_fire_native_event(thread, NULL, type, NULL, NULL, true);
+}
+
 bool js_fire_input_event(jsthread *thread, dom_string *type, dom_node *target, const struct js_mouse_event *mouse)
 {
-    return js_fire_native_event(thread, target, type, mouse, NULL);
+    return js_fire_native_event(thread, target, type, mouse, NULL, false);
 }
 
 bool js_fire_submit_event(jsthread *thread, dom_node *form, dom_node *submitter)
 {
-    return js_fire_native_event(thread, form, corestring_dom_submit, NULL, submitter);
+    return js_fire_native_event(thread, form, corestring_dom_submit, NULL, submitter, false);
 }
 
 bool js_fire_document_event(jsthread *thread, enum js_document_event event)
@@ -877,7 +895,7 @@ bool js_fire_document_event(jsthread *thread, enum js_document_event event)
     dom_string *type = event == JS_DOCUMENT_LOAD  ? corestring_dom_load
         : event == JS_DOCUMENT_DOM_CONTENT_LOADED ? corestring_dom_DOMContentLoaded
                                                   : corestring_dom_readystatechange;
-    return js_fire_native_event(thread, (dom_node *)html->document, type, NULL, NULL);
+    return js_fire_native_event(thread, (dom_node *)html->document, type, NULL, NULL, true);
 }
 
 

@@ -165,6 +165,12 @@ add_library(wisp ${WISP_LIB_TYPE}
 	content/handlers/html/layout_flex.c
 	content/handlers/html/layout_grid.c
 	content/handlers/html/object.c
+	content/handlers/html/image.c
+	content/handlers/html/image_source.c
+    content/handlers/html/dimensions.c
+    content/handlers/html/view_events.c
+	content/handlers/html/box_geometry.c
+	content/handlers/html/computed_style.c
 	content/handlers/html/redraw.c
 	content/handlers/html/redraw_border.c
 	content/handlers/html/redraw_helpers.c
@@ -194,6 +200,9 @@ add_library(wisp ${WISP_LIB_TYPE}
 	content/handlers/javascript/quickjs/location.c
 	content/handlers/javascript/quickjs/document.c
 	content/handlers/javascript/quickjs/dom.c
+	content/handlers/javascript/quickjs/image.c
+	content/handlers/javascript/quickjs/geometry.c
+	content/handlers/javascript/quickjs/rect.c
 	content/handlers/javascript/quickjs/tree.c
 	content/handlers/javascript/quickjs/markup.c
 	content/handlers/javascript/quickjs/tokenlist.c

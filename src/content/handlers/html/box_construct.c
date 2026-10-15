@@ -1728,7 +1728,7 @@ static void convert_xml_to_box(void *p)
         }
 
         /* Check for yield every 64 nodes */
-        if ((++num_processed & 0x3F) == 0) {
+        if ((++num_processed & 0x3F) == 0 && !ctx->content->layout_syncing) {
 #ifdef WISP_PROFILE_RESTYLE
             if (ctx->content->restyling && ctx->content->restyle.slow_restyle)
                 break;
@@ -1754,6 +1754,17 @@ static void convert_xml_to_box(void *p)
         box_construct_failed(ctx);
 }
 
+
+void dom_to_box_finish(html_content *content)
+{
+    /* Completion can replace the context when a partial build falls back.
+     * Never retain/dereference the old context after executing a slice. */
+    while (content->box_conversion_context != NULL) {
+        void *ctx = content->box_conversion_context;
+        guit->misc->schedule(-1, convert_xml_to_box, ctx);
+        convert_xml_to_box(ctx);
+    }
+}
 
 /* exported function documented in html/box_construct.h */
 nserror dom_to_box(dom_node *n, html_content *c, box_construct_complete_cb cb, void **box_conversion_context)

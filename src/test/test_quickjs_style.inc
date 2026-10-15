@@ -1,27 +1,7 @@
 /* CSSOM inline styles use the real DOM fixture and its retirement/GC harness. */
-static bool exec_style_script(jsthread *thread, const char *script, const char *label)
-{
-    size_t length = strlen(script) + 150;
-    char *wrapped = malloc(length);
-    ck_assert_ptr_nonnull(wrapped);
-    snprintf(wrapped, length, "try{%s}catch(e){globalThis.styleTestFailure=String(e);throw e}", script);
-    bool ok = exec_script(thread, wrapped, label);
-    free(wrapped);
-    if (!ok) {
-        JSValue global = JS_GetGlobalObject(thread->ctx);
-        JSValue reason = JS_GetPropertyStr(thread->ctx, global, "styleTestFailure");
-        const char *text = JS_ToCString(thread->ctx, reason);
-        fprintf(stderr, "%s: %s\n", label, text != NULL ? text : "evaluation failed");
-        JS_FreeCString(thread->ctx, text);
-        JS_FreeValue(thread->ctx, reason);
-        JS_FreeValue(thread->ctx, global);
-    }
-    return ok;
-}
-
 START_TEST(test_quickjs_style_values)
 {
-    ck_assert(exec_style_script(dom_thread,
+    ck_assert(exec_dom_script(dom_thread,
         "var e=document.getElementById('target'), s=e.style;"
         "function check(ok, label){if(!ok)throw Error(label);}"
         "check(s===e.style && s instanceof CSSStyleProperties && s instanceof CSSStyleDeclaration,'identity');"
@@ -57,7 +37,7 @@ END_TEST
 
 START_TEST(test_quickjs_style_indexed)
 {
-    ck_assert(exec_style_script(dom_thread,
+    ck_assert(exec_dom_script(dom_thread,
         "var s=document.body.style; s.cssText='width:1px;height:2px';"
         "const sym=Symbol(); s.note=42; s[sym]='symbol';"
         "if([...s].join()!=='width,height'||s.item(-1)!==''||s.item(4294967296)!=='width')throw Error('indices');"
@@ -80,7 +60,7 @@ END_TEST
 
 START_TEST(test_quickjs_style_conversion)
 {
-    ck_assert(exec_style_script(dom_thread,
+    ck_assert(exec_dom_script(dom_thread,
         "var e=document.getElementById('target'), s=e.style, order=[], sentinel={};"
         "function raises(f){let caught=false;try{f()}catch(e){caught=e instanceof TypeError;}if(!caught)throw Error('missing TypeError');}"
         "for(const C of [CSSStyleDeclaration,CSSStyleProperties])raises(()=>new C());"
@@ -103,7 +83,7 @@ END_TEST
 
 START_TEST(test_quickjs_style_native_assignment)
 {
-    ck_assert(exec_style_script(dom_thread,
+    ck_assert(exec_dom_script(dom_thread,
         "var e=document.getElementById('target'), s=e.style;"
         "function pending(){s.cssText='margin:var(--m);color:red'; s.marginTop='8px';} pending();",
         "native style setup"));
@@ -115,7 +95,7 @@ START_TEST(test_quickjs_style_native_assignment)
     dom_attr *attr = NULL;
     ck_assert_int_eq(dom_element_get_attribute_node(element, corestring_dom_style, &attr), DOM_NO_ERR);
     for (unsigned variant = 0; variant < 5; variant++) {
-        ck_assert(exec_style_script(dom_thread, "pending()", "restore pending style"));
+        ck_assert(exec_dom_script(dom_thread, "pending()", "restore pending style"));
         dom_string *text = NULL;
         ck_assert_int_eq(dom_attr_get_value(attr, &text), DOM_NO_ERR);
         if (variant == 0)
@@ -144,7 +124,7 @@ START_TEST(test_quickjs_style_native_assignment)
     }
     dom_node_unref(attr);
     dom_node_unref(element);
-    ck_assert(exec_style_script(dom_thread,
+    ck_assert(exec_dom_script(dom_thread,
         "e.removeAttribute('style'); if(s.length!==0 || s.cssText!=='')throw Error('remove attr');",
         "removed and cloned attributes"));
 }
@@ -152,7 +132,7 @@ END_TEST
 
 START_TEST(test_quickjs_style_retirement)
 {
-    ck_assert(exec_style_script(dom_thread,
+    ck_assert(exec_dom_script(dom_thread,
         "var e=document.createElement('div'), s=e.style; s.cycle={e,s}; s.opacity='0.4'; e=null;", "detached style"));
     JS_RunGC(dom_heap->rt);
     assert_predicate(dom_thread, "s.opacity==='0.4' && s.cycle.e.style===s", "style keeps detached element alive");
@@ -183,8 +163,58 @@ START_TEST(test_quickjs_style_conversion_retirement)
         "let caught=false; try{%s}catch(e){caught=e.name==='InvalidStateError'}"
         "if(!caught)throw Error('retired conversion');",
         operations[_i]);
-    ck_assert_msg(exec_style_script(dom_thread, script, "style conversion retirement"), "operation %s", operations[_i]);
+    ck_assert_msg(exec_dom_script(dom_thread, script, "style conversion retirement"), "operation %s", operations[_i]);
     ck_assert_uint_eq(dom_thread->dom_changes, 0);
+}
+END_TEST
+
+START_TEST(test_quickjs_computed_style_contract)
+{
+    ck_assert(exec_dom_script(dom_thread,
+        "function check(ok,label){if(!ok)throw Error(label)}"
+        "function raises(fn,name){try{fn()}catch(e){if(e.name===name)return;throw e}throw Error('missing '+name)}"
+        "var e=document.createElement('div'),s=getComputedStyle(e);"
+        "check(s instanceof CSSStyleProperties && s instanceof CSSStyleDeclaration,'prototype');"
+        "check(s!==getComputedStyle(e) && s!==e.style,'fresh readonly object');"
+        "check(s.length===0 && s.cssText==='' && s.parentRule===null && s.opacity==='','detached');"
+        "check(s.getPropertyPriority('opacity')==='' && s.item(0)==='' && s[0]===undefined,'empty declaration');"
+        "for(const fn of [()=>s.opacity='.5',()=>s.cssText='',()=>s.removeProperty('missing'),"
+        "()=>s.setProperty('unknown','','bad')])raises(fn,'NoModificationAllowedError');"
+        "let order=[];const arg=(text)=>({toString(){order.push(text);return text}});"
+        "raises(()=>s.setProperty(arg('opacity'),arg('.5'),arg('important')),'NoModificationAllowedError');"
+        "check(order.join()==='opacity,.5,important','convert all args before readonly check');"
+        "raises(()=>s.setProperty('opacity',Symbol()),'TypeError');raises(()=>s.cssText=Symbol(),'TypeError');"
+        "raises(()=>getComputedStyle(),'TypeError');raises(()=>getComputedStyle(document),'TypeError');"
+        "raises(()=>getComputedStyle.call({},e),'TypeError');raises(()=>getComputedStyle(e,Symbol()),'TypeError');"
+        "check(getComputedStyle.call(null,e).length===0,'Window default receiver');"
+        "const marker={};let caught=false;try{getComputedStyle(e,{toString(){throw marker}})}catch(x){caught=x===marker}"
+        "check(caught,'pseudo conversion exception');"
+        "s.note=42;s.cycle={s,e};e=null;check(s.note===42,'expando');",
+        "computed CSSOM interface and read-only conversion"));
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread, "s.cycle.s===s && s.cycle.e instanceof Element && s.length===0",
+        "computed wrapper retains its element");
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JSValue style = JS_GetPropertyStr(dom_thread->ctx, global, "s");
+    js_closethread(dom_thread);
+    JSValue value = JS_GetPropertyStr(dom_thread->ctx, style, "opacity");
+    ck_assert(JS_IsException(value));
+    JS_FreeValue(dom_thread->ctx, JS_GetException(dom_thread->ctx));
+    JS_FreeValue(dom_thread->ctx, style);
+    JS_FreeValue(dom_thread->ctx, global);
+}
+END_TEST
+
+START_TEST(test_quickjs_computed_conversion_retirement)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    ck_assert_int_eq(JS_SetPropertyStr(dom_thread->ctx, global, "retire",
+        JS_NewCFunction(dom_thread->ctx, close_dom_during_conversion, "retire", 0)), 1);
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(exec_dom_script(dom_thread,
+        "let caught=false;try{getComputedStyle(document.body,{toString(){retire();return '::before'}})}"
+        "catch(e){caught=e.name==='InvalidStateError'}if(!caught)throw Error('retired pseudo conversion');",
+        "computed pseudo conversion retirement"));
 }
 END_TEST
 
@@ -196,4 +226,6 @@ static void add_style_tests(TCase *tc)
     tcase_add_test(tc, test_quickjs_style_native_assignment);
     tcase_add_test(tc, test_quickjs_style_retirement);
     tcase_add_loop_test(tc, test_quickjs_style_conversion_retirement, 0, 9);
+    tcase_add_test(tc, test_quickjs_computed_style_contract);
+    tcase_add_test(tc, test_quickjs_computed_conversion_retirement);
 }

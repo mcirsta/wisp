@@ -132,7 +132,10 @@ dom_exception _dom_html_script_element_copy_internal(dom_html_script_element *ol
     if (err != DOM_NO_ERR) {
         return err;
     }
-
+    /* HTML script cloning steps copy already-started, not parser/execution
+     * state. Other flags begin as for a newly created script element. */
+    new->flags = DOM_HTML_SCRIPT_ELEMENT_FLAG_NON_BLOCKING |
+        (old->flags & DOM_HTML_SCRIPT_ELEMENT_FLAG_ALREADY_STARTED);
     return DOM_NO_ERR;
 }
 

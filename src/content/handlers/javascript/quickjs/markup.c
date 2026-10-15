@@ -12,9 +12,9 @@ static JSValue inner_html_get(JSContext *ctx, JSValueConst object)
     if (self == NULL || !qjs_execution_check(ctx))
         return JS_EXCEPTION;
     dom_string *markup = NULL;
-    /* These wrappers belong to the active HTML document. The serializer also
-     * knows that nested template owner documents have scripting disabled. */
-    dom_exception err = dom_html_serialize_fragment(self->node, true, &markup);
+    /* Documents without a browsing context have scripting disabled. */
+    dom_exception err = dom_html_serialize_fragment(
+        self->node, qjs_dom_is_active_document(ctx, self->node), &markup);
     JSValue result = err != DOM_NO_ERR ? qjs_dom_exception(ctx, err)
         : !qjs_execution_check(ctx)    ? JS_EXCEPTION
                                        : qjs_dom_from_string(ctx, markup, false);
@@ -54,7 +54,7 @@ static JSValue inner_html_set(JSContext *ctx, JSValueConst object, JSValueConst 
     dom_node *target = contents != NULL ? (dom_node *)contents : self->node;
     /* Scripting syntax follows the context document, while all fragment scripts
      * are inert. The parser uses the actual template contents owner for nodes. */
-    dom_hubbub_parser_params params = {.enable_script = true};
+    dom_hubbub_parser_params params = {.enable_script = qjs_dom_is_active_document(ctx, self->node)};
     dom_hubbub_parser *parser = NULL;
     dom_hubbub_error error = dom_hubbub_fragment_parser_create(&params, (dom_element *)self->node, &parser, &fragment);
     bool running = true;

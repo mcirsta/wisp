@@ -515,6 +515,13 @@ uint8_t css_computed_object_position(
 uint8_t css_computed_transform(
     const css_computed_style *style, uint32_t *n_functions, const css_transform_function **functions);
 
+/* Serialize an implemented computed-value family. Unknown CSS names give an
+ * empty string; known but unimplemented serializers return CSS_INVALID, never
+ * a fabricated value. Currently opacity, visibility and overflow are covered.
+ * On success *out is an owned reference; on failure it is NULL. */
+css_error css_computed_property_value(
+    const css_computed_style *style, const char *name, size_t length, lwc_string **out);
+
 #ifdef __cplusplus
 }
 #endif

@@ -149,6 +149,27 @@ if(BUILD_TESTING AND WISP_ENABLE_TESTS)
         add_test(NAME qt_base_url COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_base_url.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_base_url PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_js_clone COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_js_clone.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_js_clone PROPERTIES TIMEOUT 60)
+        add_test(NAME qt_js_images COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_js_images.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_js_images PROPERTIES TIMEOUT 60)
+        add_test(NAME qt_js_geometry COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_js_geometry.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_js_geometry PROPERTIES TIMEOUT 45)
+        add_test(NAME qt_js_computed_style COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_js_computed_style.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_js_computed_style PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_js_view_events COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_js_view_events.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_js_view_events PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_js_lazy_images COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_js_lazy_images.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_js_lazy_images PROPERTIES TIMEOUT 35)
+        add_test(NAME qt_js_bounds COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_js_bounds.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_js_bounds PROPERTIES TIMEOUT 30)
         add_test(NAME qt_js_style COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_js_style.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_js_style PROPERTIES TIMEOUT 60)

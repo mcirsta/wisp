@@ -469,6 +469,24 @@ nserror NS_Window::static_get_scrollbar_width(struct gui_window *gw, int *width)
     return NSERROR_OK;
 }
 
+nserror NS_Window::static_get_viewport_dimensions(struct gui_window *gw, int *width, int *height)
+{
+    nserror result = static_get_dimensions(gw, width, height);
+    if (result != NSERROR_OK)
+        return result;
+#ifdef WISP_QT_CAPTURE
+    // Capture uses its complete canvas as the viewport, without browser chrome.
+    if (NS_Capture::active())
+        return result;
+#endif
+    // A background tab retains its viewport even while an ancestor is hidden.
+    if (!gw->window->m_vscrollbar->isHidden())
+        *width += gw->window->m_vscrollbar->width();
+    if (!gw->window->m_hscrollbar->isHidden())
+        *height += gw->window->m_hscrollbar->height();
+    return NSERROR_OK;
+}
+
 
 /**
  * Change mouse pointer shape
@@ -595,6 +613,7 @@ static struct gui_window_table window_table = {
     .get_scroll = NS_Window::static_get_scroll,
     .set_scroll = NS_Window::static_set_scroll,
     .get_dimensions = NS_Window::static_get_dimensions,
+    .get_viewport_dimensions = NS_Window::static_get_viewport_dimensions,
     .get_scrollbar_width = NS_Window::static_get_scrollbar_width,
     .event = NS_Window::static_event,
     .set_title = NS_Window::static_set_title,

@@ -28,6 +28,7 @@
  * Redrawing CONTENT_HTML implementation.
  */
 
+#include "image.h"
 #include "content/handlers/html/table.h"
 #include <dom/dom.h>
 #include <wisp/utils/config.h>
@@ -71,6 +72,7 @@
 #include "content/handlers/html/font.h"
 #include "content/handlers/html/layout.h"
 #include "content/handlers/html/redraw_helpers.h"
+#include "content/handlers/html/box_geometry.h"
 #include "content/handlers/html/stacking.h"
 #include "content/handlers/html/box_sticky.h"
 #include "content/handlers/image/svg.h"
@@ -150,6 +152,11 @@ static struct box *html_redraw_find_bg_box(struct box *box)
     return NULL;
 }
 
+struct object_fit_size {
+    int width, height;
+    double ratio; /* Density changes natural lengths, never the image's ratio. */
+};
+
 /**
  * Calculate render dimensions for object-fit CSS property.
  *
@@ -161,19 +168,18 @@ static struct box *html_redraw_find_bg_box(struct box *box)
  * \param object_fit      CSS object-fit value
  * \param box_width       Box content area width
  * \param box_height      Box content area height
- * \param intrinsic_width   Content intrinsic width
- * \param intrinsic_height  Content intrinsic height
+ * \param natural         Content natural dimensions and aspect ratio
  * \param render_width    Updated with computed render width
  * \param render_height   Updated with computed render height
  * \param offset_x        Updated with x offset within box
  * \param offset_y        Updated with y offset within box
  */
 static void calculate_object_fit_dimensions(const css_computed_style *style, const css_unit_ctx *unit_len_ctx,
-    uint8_t object_fit, int box_width, int box_height, int intrinsic_width, int intrinsic_height, int *render_width,
+    uint8_t object_fit, int box_width, int box_height, const struct object_fit_size *natural, int *render_width,
     int *render_height, int *offset_x, int *offset_y)
 {
     /* Handle zero dimensions */
-    if (intrinsic_width <= 0 || intrinsic_height <= 0 || box_width <= 0 || box_height <= 0) {
+    if (natural->ratio <= 0 || box_width <= 0 || box_height <= 0) {
         *render_width = box_width;
         *render_height = box_height;
         *offset_x = 0;
@@ -181,8 +187,8 @@ static void calculate_object_fit_dimensions(const css_computed_style *style, con
         return;
     }
 
-    float box_ratio = (float)box_width / (float)box_height;
-    float img_ratio = (float)intrinsic_width / (float)intrinsic_height;
+    double box_ratio = (double)box_width / box_height;
+    double img_ratio = natural->ratio;
 
     switch (object_fit) {
     case CSS_OBJECT_FIT_FILL:
@@ -220,19 +226,19 @@ static void calculate_object_fit_dimensions(const css_computed_style *style, con
 
     case CSS_OBJECT_FIT_NONE:
         /* Use intrinsic size, no scaling */
-        *render_width = intrinsic_width;
-        *render_height = intrinsic_height;
+        *render_width = natural->width;
+        *render_height = natural->height;
         break;
 
     case CSS_OBJECT_FIT_SCALE_DOWN:
         /* Use 'none' if intrinsic fits, else 'contain' */
-        if (intrinsic_width <= box_width && intrinsic_height <= box_height) {
-            *render_width = intrinsic_width;
-            *render_height = intrinsic_height;
+        if (natural->width <= box_width && natural->height <= box_height) {
+            *render_width = natural->width;
+            *render_height = natural->height;
         } else {
             /* Recurse with contain */
             calculate_object_fit_dimensions(style, unit_len_ctx, CSS_OBJECT_FIT_CONTAIN, box_width, box_height,
-                intrinsic_width, intrinsic_height, render_width, render_height, offset_x, offset_y);
+                natural, render_width, render_height, offset_x, offset_y);
             return;
         }
         break;
@@ -1870,129 +1876,6 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
         overflow_x = css_computed_overflow_x(box->style);
         overflow_y = css_computed_overflow_y(box->style);
 
-        /* Check for CSS transform and apply if available */
-        uint32_t transform_count = 0;
-        const css_transform_function *transform_functions = NULL;
-        uint8_t transform_type = css_computed_transform(box->style, &transform_count, &transform_functions);
-
-
-        if (transform_type == CSS_TRANSFORM_FUNCTIONS && transform_count > 0 && transform_functions != NULL &&
-            ctx->plot->push_transform != NULL && box->node != NULL) {
-            /* Only apply transform if this box owns a DOM node - prevents child boxes
-             * sharing the parent's style from having the transform applied again */
-
-            /* CSS Transforms spec says:
-             * 1. Start with identity matrix
-             * 2. Translate by transform-origin
-             * 3. Multiply by each transform function left-to-right
-             * 4. Translate by negated transform-origin
-             *
-             * Matrix format: [a, b, c, d, tx, ty] where:
-             * | a  c  tx |
-             * | b  d  ty |
-             * | 0  0  1  |
-             */
-            /* Use transform_matrix from function scope */
-            int box_x = x_parent + box->x;
-            int box_y = y_parent + box->y;
-            float cx = box_x + box->width / 2.0f; /* transform-origin default: center */
-            float cy = box_y + box->height / 2.0f;
-
-            /* Build composed transform transform_matrix M (starting with identity, no pre-translate) */
-            for (uint32_t i = 0; i < transform_count; i++) {
-                const css_transform_function *func = &transform_functions[i];
-                float val1 = FIXTOFLT(func->value1);
-                float val2 = FIXTOFLT(func->value2);
-
-                /* Note: Percentage conversion depends on the transform function type.
-                 * For translate functions:
-                 *   - translateX(%) uses width
-                 *   - translateY(%) uses height
-                 *   - translate(x%, y%) uses width for x, height for y
-                 * Other functions handle percentages within their case blocks.
-                 */
-
-                switch (func->type) {
-                case CSS_TRANSFORM_FUNC_TRANSLATE: {
-                    /* M' = M * T(tx,ty) -- right multiply by translation */
-                    float tx = val1, ty = val2;
-                    if (func->unit1 == CSS_UNIT_PCT)
-                        tx = (val1 / 100.0f) * box->width;
-                    if (func->unit2 == CSS_UNIT_PCT)
-                        ty = (val2 / 100.0f) * box->height;
-                    transform_matrix[4] += tx * transform_matrix[0] + ty * transform_matrix[2];
-                    transform_matrix[5] += tx * transform_matrix[1] + ty * transform_matrix[3];
-                    break;
-                }
-                case CSS_TRANSFORM_FUNC_TRANSLATEX: {
-                    float tx = val1;
-                    if (func->unit1 == CSS_UNIT_PCT)
-                        tx = (val1 / 100.0f) * box->width;
-                    transform_matrix[4] += tx * transform_matrix[0];
-                    transform_matrix[5] += tx * transform_matrix[1];
-                    break;
-                }
-                case CSS_TRANSFORM_FUNC_TRANSLATEY: {
-                    float ty = val1;
-                    if (func->unit1 == CSS_UNIT_PCT)
-                        ty = (val1 / 100.0f) * box->height; /* Use HEIGHT for translateY */
-                    transform_matrix[4] += ty * transform_matrix[2];
-                    transform_matrix[5] += ty * transform_matrix[3];
-                    break;
-                }
-                case CSS_TRANSFORM_FUNC_SCALE: {
-                    /* M' = M * S(sx,sy) -- right multiply by scale */
-                    float sx = val1;
-                    /* Parsing has already supplied the omitted Y argument.
-                     * An explicit zero makes the transform non-invertible. */
-                    float sy = val2;
-                    transform_matrix[0] *= sx;
-                    transform_matrix[1] *= sx;
-                    transform_matrix[2] *= sy;
-                    transform_matrix[3] *= sy;
-                    /* tx, ty unchanged when multiplying by pure scale from right */
-                    break;
-                }
-                case CSS_TRANSFORM_FUNC_SCALEX:
-                    transform_matrix[0] *= val1;
-                    transform_matrix[1] *= val1;
-                    break;
-                case CSS_TRANSFORM_FUNC_SCALEY:
-                    transform_matrix[2] *= val1;
-                    transform_matrix[3] *= val1;
-                    break;
-                case CSS_TRANSFORM_FUNC_ROTATE: {
-                    /* M' = M * R(θ) -- right multiply by rotation */
-                    float rad = val1 * M_PI / 180.0f;
-                    float cos_a = cosf(rad), sin_a = sinf(rad);
-                    float a = transform_matrix[0], b = transform_matrix[1], c = transform_matrix[2],
-                          d = transform_matrix[3];
-                    transform_matrix[0] = a * cos_a + c * sin_a;
-                    transform_matrix[1] = b * cos_a + d * sin_a;
-                    transform_matrix[2] = c * cos_a - a * sin_a;
-                    transform_matrix[3] = d * cos_a - b * sin_a;
-                    /* tx, ty unchanged when multiplying by pure rotation from right */
-                    break;
-                }
-                default:
-                    break;
-                }
-            }
-
-            /* Apply transform-origin wrap: Final = T(cx,cy) * M * T(-cx,-cy)
-             * This computes to: tx' = tx + cx*(1-a) - cy*c, ty' = ty + cy*(1-d) - cx*b */
-            float a = transform_matrix[0], b = transform_matrix[1], c = transform_matrix[2], d = transform_matrix[3];
-            transform_matrix[4] += cx * (1.0f - a) - cy * c;
-            transform_matrix[5] += cy * (1.0f - d) - cx * b;
-
-            /* Check if the transform_matrix has any non-identity transform */
-            bool is_identity = (transform_matrix[0] == 1.0f && transform_matrix[1] == 0.0f &&
-                transform_matrix[2] == 0.0f && transform_matrix[3] == 1.0f && transform_matrix[4] == 0.0f &&
-                transform_matrix[5] == 0.0f);
-
-            /* Mark that we need a transform, but don't push yet - wait until after early bailouts */
-            need_transform = !is_identity;
-        }
     }
 
     /* avoid trivial FP maths */
@@ -2065,6 +1948,13 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
         border_top = box->border[TOP].width * scale;
         border_right = box->border[RIGHT].width * scale;
         border_bottom = box->border[BOTTOM].width * scale;
+    }
+
+    if (ctx->plot->push_transform != NULL) {
+        double matrix[6];
+        need_transform = box_transform_matrix(box, &html->unit_len_ctx, x, y, scale, matrix);
+        for (unsigned i = 0; i < 6; i++)
+            transform_matrix[i] = matrix[i];
     }
 
     /* Positioned descendants may escape a DOM ancestor's clip, but never the
@@ -2764,13 +2654,15 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
         }
 
         /* Get intrinsic dimensions of content */
-        int intrinsic_width = content_get_width(box->object);
-        int intrinsic_height = content_get_height(box->object);
+        struct object_fit_size natural = {.width = content_get_width(box->object),
+            .height = content_get_height(box->object)};
+        natural.ratio = natural.height > 0 ? (double)natural.width / natural.height : 0;
+        html_image_dimensions(box, &natural.width, &natural.height);
 
         /* Calculate render dimensions based on object-fit and object-position */
         int render_width, render_height, offset_x, offset_y;
-        calculate_object_fit_dimensions(box->style, &html->unit_len_ctx, object_fit, width, height, intrinsic_width,
-            intrinsic_height, &render_width, &render_height, &offset_x, &offset_y);
+        calculate_object_fit_dimensions(box->style, &html->unit_len_ctx, object_fit, width, height, &natural,
+            &render_width, &render_height, &offset_x, &offset_y);
 
         /* Position: base position + padding + centering offset (all scaled) */
         obj_data.x = x_scrolled + padding_left + offset_x * scale;
@@ -2815,14 +2707,16 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
 
         NSLOG(plot, INFO,
             "REDRAW_IMG box=%p box_w=%d box_h=%d scaled_w=%d scaled_h=%d render=%dx%d scale=%.2f intrinsic=%dx%d", box,
-            box->width, box->height, width, height, render_width, render_height, scale, intrinsic_width,
-            intrinsic_height);
+            box->width, box->height, width, height, render_width, render_height, scale, natural.width,
+            natural.height);
         NSLOG(plot, INFO,
             "REDRAW_IMG obj_data: x=%d y=%d w=%d h=%d obj_clip: x0=%d y0=%d x1=%d y1=%d (clip_size=%dx%d)", obj_data.x,
             obj_data.y, obj_data.width, obj_data.height, object_clip.x0, object_clip.y0, object_clip.x1, object_clip.y1,
             object_clip.x1 - object_clip.x0, object_clip.y1 - object_clip.y0);
 
-        if (!content_redraw(box->object, &obj_data, &object_clip, ctx)) {
+        /* A valid source size of zero can give object-fit:none/scale-down an
+         * empty object inside a nonempty CSS box. There is nothing to paint. */
+        if (render_width > 0 && render_height > 0 && !content_redraw(box->object, &obj_data, &object_clip, ctx)) {
             const char *tag = "";
             const char *cls = "";
             dom_string *name = NULL;

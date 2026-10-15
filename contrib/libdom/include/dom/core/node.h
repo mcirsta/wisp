@@ -81,6 +81,11 @@ typedef struct dom_node {
     uint32_t refcnt;
 } dom_node;
 
+/** Live descendants matching every ASCII-whitespace-separated class token.
+ * Only Document and Element roots are supported. The caller owns the list. */
+dom_exception dom_node_get_elements_by_class_name(
+    dom_node *root, dom_string *classes, struct dom_nodelist **result);
+
 /* DOM node vtable */
 typedef struct dom_node_vtable {
     dom_event_target_vtable base;

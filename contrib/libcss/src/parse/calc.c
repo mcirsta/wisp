@@ -10,6 +10,9 @@
 #include "parse/properties/utils.h"
 #include "parse/calc_value.h"
 #include "bytecode/calc.h"
+#include "select/helpers.h"
+#include <libcss/hint.h>
+#include "select/unit.h"
 #include "utils/parserutilserror.h"
 
 /* CSS Values 4 10.8 requires at least 32 levels. Bound C recursion while
@@ -302,5 +305,46 @@ css_error css__calc_walk(const css_declaration_token *tokens, size_t count, css_
             error = CSS_INVALID;
     }
     parserutils_vector_destroy(vector);
+    return error;
+}
+
+css_error css__calc_length(const parserutils_vector *tokens, int32_t start, int32_t end,
+    const css_unit_ctx *units, double *pixels)
+{
+    const css_token *token = parserutils_vector_peek(tokens, start);
+    if (token == NULL)
+        return CSS_INVALID;
+    /* A bare zero is a length; numbers inside math retain their number type. */
+    bool math = token->type == CSS_TOKEN_FUNCTION && css__keyword_equal(token->idata, "calc");
+    if (token->type == CSS_TOKEN_NUMBER && start + 1 == end && css__calc_number(token->idata, NULL) == 0) {
+        *pixels = 0;
+        return CSS_OK;
+    }
+    if (token->type != CSS_TOKEN_DIMENSION && !math)
+        return CSS_INVALID;
+    struct css_calc_stack stack = {0};
+    struct calc_parser parser = {.tokens = tokens, .unit_mask = UNIT_LENGTH, .check_types = true,
+        .emit = css__calc_simplify, .pw = &stack};
+    uint32_t type;
+    css_error error = calc_value(&parser, &start, &type);
+    if (error == CSS_OK && (start != end || type != UNIT_LENGTH || stack.used != 1))
+        error = CSS_INVALID;
+    if (error == CSS_OK) {
+        double value = 0;
+        const struct css_calc_sum *sum = &stack.items[0];
+        for (size_t i = 0; i < CSS_CALC_UNIT_COUNT; i++) {
+            if (sum->present & (1u << i))
+                value += css_unit_len2css_px_calc(NULL, units, sum->values[i], css__to_css_unit(css__calc_units[i].unit));
+        }
+        /* Math is range-clamped at computed-value time, unlike a negative
+         * literal. Use the rendering engine's finite length range. */
+        if (math)
+            value = isnan(value) || value < 0 ? 0 : value;
+        if (value < 0)
+            error = CSS_INVALID;
+        else
+            *pixels = fmin(value, (double)INT32_MAX / F_1);
+    }
+    free(stack.items);
     return error;
 }

@@ -1181,7 +1181,7 @@ class MultiFileGenerator:
         gen = GperfInputGenerator(keys, name_aliases)
         return gen.generate_gperf_input()
     
-    def generate_declaration_names(self):
+    def declaration_names(self):
         """Supported CSSOM attributes from the same registrations as gperf."""
         names = {p['name'].replace('_', '-') for p in self.dispatch_order}
         names.update(name.replace('_', '-') for name, meta in self.metadata.items()
@@ -1189,6 +1189,19 @@ class MultiFileGenerator:
                      or meta.get('is_alias', False))
         if self.toml_reader:
             names.update(self.toml_reader.get_legacy_aliases())
+        return names
+
+    def generate_declaration_names(self):
+        names = self.declaration_names()
+        return '/* Generated from properties.toml. Do not edit. */\n' + ''.join(
+            f'"{name}",\n' for name in sorted(names))
+
+    def generate_declaration_longhands(self):
+        data = self.toml_reader.toml_data if self.toml_reader else self.metadata
+        names = (name for name in self.declaration_names()
+                 if name.replace('-', '_') in data
+                 and not data[name.replace('-', '_')].get('declaration_longhands')
+                 and (self.toml_reader or not data[name.replace('-', '_')].get('is_shorthand')))
         return '/* Generated from properties.toml. Do not edit. */\n' + ''.join(
             f'"{name}",\n' for name in sorted(names))
 
@@ -1636,6 +1649,7 @@ def main():
         (declaration_ids_out, generator.generate_declaration_ids),
         (gperf_out, generator.generate_gperf_input),
         (os.path.join(output_dir, 'declaration_names.inc'), generator.generate_declaration_names),
+        (os.path.join(output_dir, 'declaration_longhands.inc'), generator.generate_declaration_longhands),
         (cascade_decl_out, generator.generate_cascade_declarations),
         (parse_decl_out, generator.generate_parse_declarations),
         (unit_masks_out, generator.generate_unit_masks),

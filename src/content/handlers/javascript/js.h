@@ -141,6 +141,14 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
  * DOM legacy target override (Document target, Window currentTarget/path). */
 enum js_document_event { JS_DOCUMENT_READYSTATE, JS_DOCUMENT_DOM_CONTENT_LOADED, JS_DOCUMENT_LOAD };
 bool js_fire_document_event(jsthread *thread, enum js_document_event event);
+/* Trusted, non-bubbling, non-cancelable resource event on a DOM element. */
+/* Enqueue an image source update during JS execution; native parsing uses the HTML task. */
+void js_queue_image_update(jsthread *thread, struct dom_node *node, uint32_t revision);
+
+bool js_fire_element_event(jsthread *thread, struct dom_node *target, struct dom_string *type);
+
+/** Fire a trusted, non-bubbling Event at Window, without the load target override. */
+bool js_fire_window_event(jsthread *thread, struct dom_string *type);
 
 bool js_dom_event_add_listener(jsthread *thread, struct dom_document *document, struct dom_node *node,
     struct dom_string *event_type_dom, void *js_funcval);

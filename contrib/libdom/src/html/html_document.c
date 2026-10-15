@@ -234,10 +234,14 @@ void _dom_html_document_destroy(dom_node_internal *node)
 
 dom_exception _dom_html_document_copy(dom_node_internal *old, dom_node_internal **copy)
 {
-    UNUSED(old);
-    UNUSED(copy);
-
-    return DOM_NOT_SUPPORTED_ERR;
+    dom_html_document *doc = NULL;
+    *copy = NULL;
+    dom_exception err = _dom_html_document_create(NULL, NULL, &doc);
+    if (err != DOM_NO_ERR)
+        return err;
+    _dom_document_copy_metadata((dom_document *)old, &doc->base);
+    *copy = &doc->base.base;
+    return DOM_NO_ERR;
 }
 
 #define RETURN_IF_MATCH(_x, _y)                                                                                        \

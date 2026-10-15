@@ -6,6 +6,8 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
+#include <stdio.h>
 
 #include "parse/declaration_value.h"
 #include "parse/declaration_background.h"
@@ -22,6 +24,22 @@
 static css_error intern(const char *text, size_t length, lwc_string **out)
 {
     return lwc_intern_string(text, length, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+}
+
+css_error css__declaration_fixed_serialize(css_fixed value, lwc_string **out)
+{
+    /* Round to six decimal places using integer arithmetic, independent of
+     * the process locale. Negation widens first, so INT32_MIN is safe too. */
+    int64_t number = value;
+    uint64_t scaled = ((uint64_t)(number < 0 ? -number : number) * 1000000 + 512) / 1024;
+    char text[40];
+    int length = snprintf(text, sizeof(text), "%s%" PRIu64 ".%06" PRIu64,
+        number < 0 && scaled != 0 ? "-" : "", scaled / 1000000, scaled % 1000000);
+    while (text[length - 1] == '0')
+        length--;
+    if (text[length - 1] == '.')
+        length--;
+    return intern(text, length, out);
 }
 
 static const char *wide_keyword(const css_declaration *source)

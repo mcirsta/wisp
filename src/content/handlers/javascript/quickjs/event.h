@@ -36,6 +36,7 @@ struct qjs_event_options {
 int qjs_event_read_options(JSContext *ctx, JSValueConst dict, struct qjs_event_options *options);
 /* Consumes object; allocates the appropriate native-backed event value. */
 JSValue qjs_event_allocate(JSContext *ctx, JSValue object, enum qjs_event_kind kind, bool composed);
+JSValue qjs_document_create_event(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv);
 /* Host-created trusted base Event, with false bubbles/cancelable/composed. */
 JSValue qjs_event_create(JSContext *ctx, const char *type);
 /* Host-created trusted submit event; retains the submitter wrapper. */

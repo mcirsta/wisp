@@ -13,16 +13,18 @@
 #include <wisp/misc.h>
 #include <wisp/utils/corestrings.h>
 #include <wisp/utils/nsurl.h>
+#include <wisp/utils/nsoption.h>
 #include "content/handlers/html/box_special.h"
 #include "content/handlers/html/box_manipulate.h"
 #include "content/handlers/html/object.h"
+#include "content/handlers/html/image.h"
 #include "utils/talloc.h"
 
 static html_content html;
 static struct box box;
 static nsurl *url;
 static dom_node *node;
-static unsigned fetches, releases, restyles, opens;
+static unsigned fetches, releases, restyles, opens, closes;
 static uint32_t request_flags;
 static int cache_identity;
 static nserror retrieve_error;
@@ -30,6 +32,40 @@ static bool synchronous_error;
 static content_status resource_status;
 static hlcache_handle_callback cache_callback;
 static void *cache_pw;
+static void (*image_task)(void *);
+static void *image_pw;
+static bool pinned;
+
+/* The isolated HTML record has no frontend/cache user list. Keep the pin
+ * contract checked while image tasks exercise the real DOM event dispatcher. */
+bool content_add_user(struct content *content,
+    void (*callback)(struct content *, content_msg, const union content_msg_data *, void *), void *pw)
+{
+    ck_assert_ptr_eq(content, &html.base);
+    ck_assert(!pinned);
+    pinned = true;
+    return true;
+}
+
+void content_remove_user(struct content *content,
+    void (*callback)(struct content *, content_msg, const union content_msg_data *, void *), void *pw)
+{
+    ck_assert_ptr_eq(content, &html.base);
+    ck_assert(pinned);
+    pinned = false;
+}
+
+static void flush_image_tasks(void)
+{
+    for (unsigned i = 0; image_task != NULL; i++) {
+        ck_assert_msg(i < 8, "Image task did not settle");
+        void (*callback)(void *) = image_task;
+        void *pw = image_pw;
+        image_task = NULL;
+        callback(pw);
+    }
+    ck_assert(!pinned);
+}
 
 static hlcache_handle *handle(void)
 {
@@ -78,6 +114,13 @@ nserror content_open(hlcache_handle *content, struct browser_window *bw, struct 
     return NSERROR_OK;
 }
 
+nserror content_close(hlcache_handle *content)
+{
+    ck_assert_ptr_eq(content, handle());
+    closes++;
+    return NSERROR_OK;
+}
+
 nserror hlcache_handle_release(hlcache_handle *content)
 {
     ck_assert_ptr_eq(content, handle());
@@ -94,9 +137,19 @@ void html_request_restyle(html_content *content)
 
 static nserror schedule(int delay, void (*callback)(void *), void *pw)
 {
-    /* Only cancel a pending refresh or queue a deferred reformat. Restyling
-     * itself is recorded above, so no construction runs inside the callback. */
-    ck_assert(delay < 0 || callback == html_deferred_reformat);
+    /* Reflow/restyle are observed, not executed, at this cache boundary.
+     * Element image completion runs from a separate task, after the callback. */
+    if (callback == html_deferred_reformat)
+        return NSERROR_OK;
+    if (delay < 0) {
+        if (callback == image_task && pw == image_pw)
+            image_task = NULL;
+        return NSERROR_OK;
+    }
+    ck_assert_int_eq(delay, 0);
+    ck_assert(image_task == NULL || (image_task == callback && image_pw == pw));
+    image_task = callback;
+    image_pw = pw;
     return NSERROR_OK;
 }
 
@@ -138,15 +191,17 @@ static void setup(void)
 {
     memset(&html, 0, sizeof(html));
     memset(&box, 0, sizeof(box));
-    fetches = releases = restyles = opens = 0;
+    fetches = releases = restyles = opens = closes = 0;
     request_flags = 0;
     retrieve_error = NSERROR_OK;
     synchronous_error = false;
     resource_status = CONTENT_STATUS_LOADING;
     cache_callback = NULL;
     cache_pw = NULL;
+    image_task = NULL;
+    pinned = false;
     const char source[] = "<!doctype html><object id=object data=broken.png>fallback</object>"
-                          "<object id=other data=broken.png>other</object><img id=image><embed id=embed>"
+                          "<object id=other data=broken.png>other</object><img id=image src=broken.png><embed id=embed>"
                           "<img id=image-alt src=broken.png alt='alternative'>";
     dom_hubbub_parser *parser;
     dom_hubbub_parser_params params = {.enc = "UTF-8", .fix_enc = true};
@@ -191,6 +246,7 @@ START_TEST(test_image_failure_changes_representation)
         html.restyling = _i == REBUILDING || _i == REBUILDING_HIDDEN;
         fail_request();
     }
+    flush_image_tasks();
     ck_assert_msg(html_object_get_state(&html, image, url) == HTML_OBJECT_FAILED,
         "Image failure lost at timing %d", _i);
     ck_assert_msg(restyles == 1, "Image alt needs reconstruction at timing %d, got %u", _i, restyles);
@@ -308,6 +364,64 @@ START_TEST(test_pending_becomes_available)
     ck_assert(html_fetch_object(&html, url, &box, CONTENT_ANY, false));
     ck_assert_ptr_eq(box.object, handle());
     ck_assert_uint_eq(fetches, 1);
+}
+END_TEST
+
+START_TEST(test_element_image_availability)
+{
+    dom_node *image = by_id("image-alt");
+    box.node = image;
+    box.flags |= IS_REPLACED;
+    html.bw = (struct browser_window *)&cache_identity;
+    ck_assert(html_fetch_object(&html, url, &box, CONTENT_IMAGE, false));
+    void *binding = NULL;
+    ck_assert_int_eq(dom_node_get_user_data(image, corestring_dom___ns_key_image_request, &binding), DOM_NO_ERR);
+    ck_assert_ptr_eq(binding, html.object_list->image);
+    dom_node *clone;
+    ck_assert_int_eq(dom_node_clone_node(image, false, &clone), DOM_NO_ERR);
+    ck_assert_int_eq(dom_node_get_user_data(clone, corestring_dom___ns_key_image_request, &binding), DOM_NO_ERR);
+    ck_assert_ptr_null(binding); /* A clone never borrows the original request. */
+    dom_node_unref(clone);
+    struct html_image_state state;
+    html_image_get_state(&html, image, &state);
+    ck_assert(!state.complete && state.natural_width == 0);
+
+    resource_status = CONTENT_STATUS_READY;
+    hlcache_event event = {.type = CONTENT_MSG_READY};
+    ck_assert_int_eq(cache_callback(handle(), &event, cache_pw), NSERROR_OK);
+    html_image_get_state(&html, image, &state);
+    ck_assert(!state.complete && state.natural_width == 32 && state.natural_height == 24);
+    ck_assert_ptr_eq(box.object, handle());
+    ck_assert_int_eq(html.base.active, 1);
+
+    resource_status = CONTENT_STATUS_DONE;
+    event.type = CONTENT_MSG_DONE;
+    ck_assert_int_eq(cache_callback(handle(), &event, cache_pw), NSERROR_OK);
+    html_image_get_state(&html, image, &state);
+    ck_assert(state.complete && state.natural_width == 32);
+    ck_assert_int_eq(html.base.active, 1); /* Element completion task still pending. */
+    flush_image_tasks();
+    ck_assert_int_eq(html.base.active, 0);
+    ck_assert_int_eq(html.images_active, 0);
+    ck_assert_uint_eq(opens, 1);
+    ck_assert_uint_eq(closes, 0);
+
+    /* A decoder failure discovered during painting invalidates even a settled
+     * request, closes its presentation and retains only the failed URL/state. */
+    fail_request();
+    ck_assert_ptr_null(box.object);
+    ck_assert(!html.object_list->opened);
+    ck_assert_uint_eq(closes, 1);
+    flush_image_tasks();
+    html_image_get_state(&html, image, &state);
+    ck_assert(state.complete && state.natural_width == 0 && state.natural_height == 0);
+    ck_assert_uint_eq(releases, 1);
+    ck_assert_int_eq(html.base.active, 0);
+    ck_assert_uint_eq(restyles, 1);
+    ck_assert_int_eq(html_object_free_objects(&html), NSERROR_OK);
+    ck_assert_int_eq(dom_node_get_user_data(image, corestring_dom___ns_key_image_request, &binding), DOM_NO_ERR);
+    ck_assert_ptr_null(binding); /* Retaining a DOM node cannot retain a freed request pointer. */
+    dom_node_unref(image);
 }
 END_TEST
 
@@ -442,6 +556,7 @@ START_TEST(test_non_object_failures)
     if (_i == 4)
         html.aborted = true;
     fail_request();
+    flush_image_tasks();
     ck_assert_uint_eq(restyles, 0);
     ck_assert_uint_eq(releases, 1);
     ck_assert_int_eq(html.base.active, 0);
@@ -491,6 +606,8 @@ int main(void)
     static struct gui_misc_table misc = {.schedule = schedule};
     static struct wisp_table gui = {.misc = &misc};
     guit = &gui;
+    if (nsoption_init(NULL, NULL, NULL) != NSERROR_OK)
+        return EXIT_FAILURE;
     if (corestrings_init() != NSERROR_OK)
         return EXIT_FAILURE;
     Suite *suite = suite_create("Object resource fallback");
@@ -500,6 +617,7 @@ int main(void)
     tcase_add_loop_test(tc, test_image_failure_changes_representation, 0, TIMINGS);
     tcase_add_test(tc, test_pending_failure_keeps_fallback);
     tcase_add_loop_test(tc, test_pending_becomes_available, VISIBLE, REBUILDING_HIDDEN + 1);
+    tcase_add_test(tc, test_element_image_availability);
     tcase_add_test(tc, test_ready_resource_rebinds_before_done);
     tcase_add_loop_test(tc, test_image_completion_rejoins_alt_fragments, 0, 4);
     tcase_add_loop_test(tc, test_decode_failure_after_done, VISIBLE, REBUILDING_HIDDEN + 1);
@@ -513,5 +631,6 @@ int main(void)
     int failed = srunner_ntests_failed(runner);
     srunner_free(runner);
     corestrings_fini();
+    nsoption_finalise(NULL, NULL);
     return failed ? EXIT_FAILURE : EXIT_SUCCESS;
 }

@@ -145,8 +145,11 @@ static nserror html_convert_css_callback(hlcache_handle *css, const hlcache_even
         break;
     }
 
-    if (event->type == CONTENT_MSG_DONE || event->type == CONTENT_MSG_ERROR)
+    if (event->type == CONTENT_MSG_DONE || event->type == CONTENT_MSG_ERROR) {
+        if (parent->layout_provisional)
+            parent->layout_styles_dirty = true;
         html_script_schedule(parent);
+    }
 
     if (html_can_begin_conversion(parent)) {
         html_begin_conversion(parent);

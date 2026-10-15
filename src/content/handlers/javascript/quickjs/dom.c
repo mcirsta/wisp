@@ -11,7 +11,11 @@
 #include <wisp/content/handlers/html/private.h>
 #include <wisp/utils/nsoption.h>
 #include "content/handlers/html/restyle.h"
+#include "content/handlers/html/image.h"
+#include <wisp/utils/corestrings.h>
 
+/* One registry per JS realm, shared by its active, cloned and inert documents.
+ * Only the realm root uses this larger allocation; other Documents are Nodes. */
 struct qjs_dom_document {
     struct qjs_dom_node base;
     JSValue cache, prototypes[QJS_DOM_PROTOTYPES];
@@ -76,7 +80,7 @@ static void node_finalizer(JSRuntime *rt, JSValue object)
         if (node->next != NULL)
             node->next->previous = node->previous;
     }
-    if (node->type == DOM_DOCUMENT_NODE) {
+    if (node->document == (struct qjs_dom_document *)node) {
         struct qjs_dom_document *doc = (struct qjs_dom_document *)node;
         release_nodes(doc);
         /* GC can finalize either side of the wrapper/document cycle first. */
@@ -109,7 +113,7 @@ static void node_mark(JSRuntime *rt, JSValueConst object, JS_MarkFunc *mark)
     JS_MarkValue(rt, node->style, mark);
     for (unsigned i = 0; i < 2; i++)
         JS_MarkValue(rt, node->child_lists[i], mark);
-    if (node->type == DOM_DOCUMENT_NODE) {
+    if (node->document == (struct qjs_dom_document *)node) {
         struct qjs_dom_document *doc = (struct qjs_dom_document *)node;
         JS_MarkValue(rt, doc->cache, mark);
         for (unsigned i = 0; i < QJS_DOM_PROTOTYPES; i++)
@@ -131,8 +135,8 @@ struct qjs_dom_node *qjs_dom_get(JSContext *ctx, JSValueConst object, dom_node_t
         JS_ThrowTypeError(ctx, "Incorrect DOM receiver");
         return NULL;
     }
-    /* Cross-document wrappers are not exposed yet. Never let a borrowed method
-     * attribute a foreign document's mutation to this document's renderer. */
+    /* Native documents can share this realm (clones and template owners), but
+     * borrowed methods must still reject nodes from another page realm. */
     if (node->document != thread->dom_document) {
         qjs_dom_exception(ctx, DOM_INVALID_STATE_ERR);
         return NULL;
@@ -141,7 +145,7 @@ struct qjs_dom_node *qjs_dom_get(JSContext *ctx, JSValueConst object, dom_node_t
         qjs_dom_exception(ctx, DOM_INVALID_STATE_ERR);
         return NULL;
     }
-    if (node->type == DOM_DOCUMENT_NODE && node->node == NULL) {
+    if (node->document == (struct qjs_dom_document *)node && node->node == NULL) {
         html_content *html = thread->doc_priv;
         node->node = dom_node_ref(html->document);
         if (node->node != NULL)
@@ -156,7 +160,22 @@ struct qjs_dom_node *qjs_dom_get(JSContext *ctx, JSValueConst object, dom_node_t
 
 JSValue qjs_dom_owner(JSContext *ctx, JSValueConst object, struct qjs_dom_node *node)
 {
-    return JS_DupValue(ctx, node->type == DOM_DOCUMENT_NODE ? object : node->owner);
+    return JS_DupValue(ctx, node->document == (struct qjs_dom_document *)node ? object : node->owner);
+}
+
+bool qjs_dom_is_active_document(JSContext *ctx, dom_node *node)
+{
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    dom_document *owner = NULL;
+    dom_node_type type;
+    dom_node_get_node_type(node, &type);
+    if (type == DOM_DOCUMENT_NODE)
+        owner = (dom_document *)dom_node_ref(node);
+    else
+        dom_node_get_owner_document(node, &owner);
+    bool active = owner == ((html_content *)thread->doc_priv)->document;
+    dom_node_unref(owner);
+    return active;
 }
 
 static bool node_namespace_is(dom_node *node, const char *name)
@@ -204,9 +223,9 @@ JSValue qjs_dom_wrap(JSContext *ctx, JSValueConst owner, dom_node *native)
     struct qjs_dom_node *base = qjs_dom_get(ctx, owner, DOM_DOCUMENT_NODE);
     if (base == NULL)
         return JS_EXCEPTION;
-    if (native == base->node)
-        return JS_DupValue(ctx, owner);
-    struct qjs_dom_document *doc = (struct qjs_dom_document *)base;
+    struct qjs_dom_document *doc = base->document;
+    if (native == doc->base.node)
+        return qjs_dom_owner(ctx, owner, base);
     char key[2 * sizeof(uintptr_t) + 1];
     snprintf(key, sizeof(key), "%" PRIxPTR, (uintptr_t)native);
     JSValue cached = JS_GetPropertyStr(ctx, doc->cache, key);
@@ -218,8 +237,13 @@ JSValue qjs_dom_wrap(JSContext *ctx, JSValueConst owner, dom_node *native)
         return qjs_dom_exception(ctx, err);
     enum qjs_dom_prototype kind = QJS_NODE;
     switch (type) {
+    case DOM_DOCUMENT_NODE:
+        kind = dom_document_is_html((dom_document *)native) ? QJS_HTML_DOCUMENT : QJS_DOCUMENT;
+        break;
     case DOM_ELEMENT_NODE:
         kind = qjs_dom_is_html(native) ? QJS_HTML_ELEMENT : QJS_ELEMENT;
+        if (kind == QJS_HTML_ELEMENT && html_image_is_element(native))
+            kind = QJS_HTML_IMAGE_ELEMENT;
         if (kind == QJS_ELEMENT && qjs_dom_is_svg(native))
             kind = QJS_SVG_ELEMENT;
         break;
@@ -250,7 +274,7 @@ JSValue qjs_dom_wrap(JSContext *ctx, JSValueConst owner, dom_node *native)
     node->node = dom_node_ref(native);
     node->type = type;
     node->id = ++doc->next_id;
-    node->owner = JS_DupValue(ctx, owner);
+    node->owner = qjs_dom_owner(ctx, owner, base);
     node->event_target = JS_UNDEFINED;
     node->class_list = node->style = JS_UNDEFINED;
     node->child_lists[0] = node->child_lists[1] = JS_UNDEFINED;
@@ -271,20 +295,51 @@ JSValue qjs_dom_wrap(JSContext *ctx, JSValueConst owner, dom_node *native)
 
 /* Conversion helpers preserve exceptions and byte lengths (including non-ASCII
  * and embedded NULs). No safe/stringifying fallback may swallow an interrupt. */
-dom_string *qjs_dom_string(JSContext *ctx, JSValueConst value, bool nullable)
+static dom_string *dom_string_convert(JSContext *ctx, JSValueConst value, bool nullable, bool scalar)
 {
     size_t length = 0;
     const char *text = nullable && (JS_IsNull(value) || JS_IsUndefined(value)) ? ""
                                                                                : JS_ToCStringLen(ctx, &length, value);
     if (text == NULL)
         return NULL;
+    /* QuickJS emits WTF-8 for isolated surrogates. Web IDL USVString replaces
+     * those with U+FFFD; ordinary DOMString deliberately preserves them. */
+    char *normalized = NULL;
+    if (scalar) {
+        for (size_t i = 0; i + 2 < length; i++) {
+            if ((unsigned char)text[i] == 0xed && ((unsigned char)text[i + 1] & 0xe0) == 0xa0 &&
+                ((unsigned char)text[i + 2] & 0xc0) == 0x80) {
+                if (normalized == NULL) {
+                    normalized = js_malloc(ctx, length);
+                    if (normalized == NULL) {
+                        JS_FreeCString(ctx, text);
+                        return NULL;
+                    }
+                    memcpy(normalized, text, length);
+                }
+                memcpy(normalized + i, "\xef\xbf\xbd", 3);
+                i += 2;
+            }
+        }
+    }
     dom_string *result = NULL;
-    dom_exception err = dom_string_create((const uint8_t *)text, length, &result);
+    dom_exception err = dom_string_create((const uint8_t *)(normalized != NULL ? normalized : text), length, &result);
+    js_free(ctx, normalized);
     if (!(nullable && (JS_IsNull(value) || JS_IsUndefined(value))))
         JS_FreeCString(ctx, text);
     if (err != DOM_NO_ERR)
         qjs_dom_exception(ctx, err);
     return result;
+}
+
+dom_string *qjs_dom_string(JSContext *ctx, JSValueConst value, bool nullable)
+{
+    return dom_string_convert(ctx, value, nullable, false);
+}
+
+dom_string *qjs_dom_usv_string(JSContext *ctx, JSValueConst value)
+{
+    return dom_string_convert(ctx, value, false, true);
 }
 
 JSValue qjs_dom_from_string(JSContext *ctx, dom_string *value, bool nullable)
@@ -311,6 +366,10 @@ void qjs_dom_changed_target(JSContext *ctx, struct qjs_dom_node *node, dom_node 
     if (thread == NULL || thread->closed || thread->doc_priv == NULL)
         return;
     html_content *html = thread->doc_priv;
+    if (attribute != NULL && html_image_is_element(target) && qjs_dom_is_active_document(ctx, target) &&
+        (dom_string_isequal(attribute, corestring_dom_src) || dom_string_isequal(attribute, corestring_dom_srcset) ||
+            dom_string_isequal(attribute, corestring_dom_sizes)))
+        html_image_schedule(html, target, true);
     bool connected = false;
     /* Fail conservatively: an allocation failure may have changed part of the
      * subtree. Detached-node edits do not affect the rendered document. */
@@ -388,7 +447,7 @@ int qjs_init_document(JSContext *ctx)
         int parent;
     } interfaces[] = {{"Node", -1}, {"Element", QJS_NODE}, {"HTMLElement", QJS_ELEMENT}, {"Document", QJS_NODE},
         {"HTMLDocument", QJS_DOCUMENT}, {"CharacterData", QJS_NODE}, {"Text", QJS_CHARACTER_DATA},
-        {"Comment", QJS_CHARACTER_DATA}, {"DocumentType", QJS_NODE}, {"DocumentFragment", QJS_NODE}, {"SVGElement", QJS_ELEMENT}};
+        {"Comment", QJS_CHARACTER_DATA}, {"DocumentType", QJS_NODE}, {"DocumentFragment", QJS_NODE}, {"SVGElement", QJS_ELEMENT}, {"HTMLImageElement", QJS_HTML_ELEMENT}};
     for (unsigned i = 0; i < QJS_DOM_PROTOTYPES; i++) {
         JSValue parent = interfaces[i].parent < 0 ? JS_UNDEFINED : doc->prototypes[interfaces[i].parent];
         if (interfaces[i].parent < 0) {
@@ -425,6 +484,8 @@ int qjs_init_document(JSContext *ctx)
     if (qjs_init_tokenlist(ctx) < 0 || qjs_dom_install_style(ctx, doc->prototypes) < 0 || qjs_dom_install_properties(ctx, doc->prototypes) < 0 ||
         qjs_dom_install_tree(ctx, doc->prototypes) < 0 || qjs_dom_install_markup(ctx, doc->prototypes) < 0 ||
         qjs_dom_install_collections(ctx, doc->prototypes) < 0 ||
+        qjs_dom_install_images(ctx, doc->prototypes) < 0 ||
+        qjs_dom_install_geometry(ctx, doc->prototypes) < 0 ||
         JS_SetPrototype(ctx, object, doc->prototypes[QJS_HTML_DOCUMENT]) < 0)
         goto out;
     ret = JS_DefinePropertyValueStr(ctx, global, "document", JS_DupValue(ctx, object), JS_PROP_ENUMERABLE);

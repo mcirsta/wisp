@@ -48,6 +48,7 @@
 #include <wisp/content/handlers/html/interaction.h>
 #include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/object.h"
+#include "content/handlers/html/image.h"
 #include "content/handlers/html/box_construct.h"
 #include "content/handlers/html/box_manipulate.h"
 #include "utils/talloc.h"
@@ -226,6 +227,37 @@ static void html_object_done(struct box *box, hlcache_handle *object, bool backg
 }
 
 
+/* Image ownership is independent of the box; publishing an available request
+ * uses the same dimensions, fallback and deferred reflow as other resources. */
+void html_object_image_changed(struct content_html_object *object, bool changed)
+{
+    html_content *html = (html_content *)object->parent;
+    struct box *box = object->box;
+    if (box != NULL) {
+        if (html_object_available(object))
+            html_object_done(box, object->content, false, 0);
+        else
+            box->object = NULL;
+        if (html->bw != NULL && html_object_can_open(object)) {
+            content_open(object->content, html->bw, &html->base, box->object_params);
+            object->opened = true;
+        }
+    }
+    /* Rebinding is part of an already requested layout and must not start a
+     * second one, especially when the new box already represents alt text. */
+    if (!changed || html->aborted)
+        return;
+    if (object->failed && html_object_has_image_alt(object) &&
+        (box == NULL || (box->flags & IS_REPLACED) || html->restyling)) {
+        html_request_restyle(html);
+    } else if (box != NULL && !object->failed && !(box->flags & IS_REPLACED)) {
+        html_request_restyle(html);
+    } else if (html->had_initial_layout && !html->restyling && !html->pending_reformat) {
+        html->pending_reformat = true;
+        guit->misc->schedule(0, html_deferred_reformat, html);
+    }
+}
+
 /**
  * Callback for hlcache_handle_retrieve() for objects with no box.
  */
@@ -251,6 +283,10 @@ void html_deferred_reformat(void *p)
 {
     html_content *c = p;
     PERF("html_deferred_reformat called (active=%d)", c->base.active);
+    /* Parser-time measurement does not publish a presentation. Keep the dirty
+     * bit for the next synchronous read, or normal conversion. */
+    if (c->layout_provisional)
+        return;
     c->pending_reformat = false;
     if (c->restyling || c->base.status == CONTENT_STATUS_ERROR)
         return;
@@ -862,6 +898,10 @@ nserror html_object_abort_objects(html_content *htmlc)
     struct content_html_object *object;
 
     for (object = htmlc->object_list; object != NULL; object = object->next) {
+        if (object->image != NULL) {
+            html_image_stop(object->image);
+            continue;
+        }
         if (object->content == NULL)
             continue;
 
@@ -899,6 +939,8 @@ nserror html_object_close_objects(html_content *html)
     for (object = html->object_list; object != NULL; object = next) {
         next = object->next;
 
+        if (object->image != NULL)
+            html_image_stop(object->image);
         if (object->content == NULL || !object->opened)
             continue;
 
@@ -922,7 +964,9 @@ nserror html_object_free_objects(html_content *html)
     while (html->object_list != NULL) {
         struct content_html_object *victim = html->object_list;
 
-        if (victim->content != NULL) {
+        if (victim->image != NULL)
+            html_image_fini(victim->image);
+        else if (victim->content != NULL) {
             NSLOG(wisp, INFO, "object %p", victim->content);
 
             if (content_get_type(victim->content) == CONTENT_HTML) {
@@ -1305,6 +1349,8 @@ bool html_fetch_object_buffer(html_content *c, const uint8_t *data, size_t len, 
 
 bool html_fetch_object(html_content *c, nsurl *url, struct box *box, content_type permitted_types, bool background)
 {
+    if (!background && permitted_types == CONTENT_IMAGE && box != NULL && html_image_is_element(box->node))
+        return html_image_bind(c, box->node, box) == NSERROR_OK;
     return html_fetch_object_layer(c, url, box, permitted_types, background, 0);
 }
 

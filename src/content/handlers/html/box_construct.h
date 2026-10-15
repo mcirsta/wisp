@@ -102,6 +102,10 @@ bool box_type_generates_content(box_type type);
 nserror
 dom_to_box(struct dom_node *n, struct html_content *c, box_construct_complete_cb cb, void **box_conversion_context);
 
+/** Finish just this converter (including restyle restart/fallback), without
+ * dispatching scheduler callbacks, resource completion or script events. */
+void dom_to_box_finish(struct html_content *content);
+
 
 /* A deferred request, owned by its unpublished region. The box (including
  * object parameters) belongs to that same region. No cache handle or live object

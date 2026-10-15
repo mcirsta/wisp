@@ -24,6 +24,12 @@
 #ifndef WISP_HTML_CSS_H
 #define WISP_HTML_CSS_H
 
+#include <dom/core/node.h>
+#include <libcss/select.h>
+#include <wisp/utils/errors.h>
+
+struct html_content;
+
 /**
  * Initialise html content css handling.
  *
@@ -94,5 +100,17 @@ bool html_css_process_link(struct html_content *htmlc, dom_node *node);
  * \return true on success else false.
  */
 bool html_css_update_style(struct html_content *htmlc, dom_node *node);
+
+/* A synchronous borrowed style, with temporary ownership only when the element
+ * has no box or the requested pseudo needs initial/inherited values. Never keep
+ * this across a DOM mutation or layout. Caller first synchronizes layout. */
+struct html_computed_style {
+    const css_computed_style *style;
+    css_select_results *owned;
+    css_computed_style *initial;
+};
+nserror html_computed_style_get(struct html_content *html, dom_node *node,
+    css_pseudo_element pseudo, struct html_computed_style *result);
+void html_computed_style_fini(struct html_computed_style *result);
 
 #endif

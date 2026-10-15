@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Tion/Bihon lazySizes image loading</title>
+<style>
+  body { margin: 16px; font: 16px/24px sans-serif; }
+  article { width: 320px; max-width: 100%; }
+  img { display: block; width: 100%; height: auto; }
+  .gap { height: 2200px; }
+</style>
+<article>
+  <h1>Initial article image</h1>
+  <img id="initial" class="lazyload enews-article-offerer-img"
+       src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+       data-src="../test_data/object_fit/test_wide.png"
+       data-srcset="../test_data/object_fit/test_wide.png 400w"
+       data-sizes="auto" alt="Initial image">
+  <div class="gap"></div>
+  <h2>Article image reached by scrolling</h2>
+  <img id="later" class="lazyload enews-article-offerer-img"
+       src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+       data-src="../test_data/object_fit/test_wide.png"
+       data-srcset="../test_data/object_fit/test_wide.png 400w"
+       data-sizes="auto" alt="Later image">
+</article>
+<script src="vendor/lazysizes-4.0.3.min.js"></script>

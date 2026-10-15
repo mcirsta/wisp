@@ -379,15 +379,16 @@ static css_error mq_parse_range(lwc_string **strings, const parserutils_vector *
         return error;
     }
     if (name_first) {
-        /* Invert operator */
+        /* Store value op feature. Reversing the operands preserves strictness:
+         * width > 500px is 500px < width, not 500px <= width. */
         if (op == CSS_MQ_FEATURE_OP_LT) {
-            op = CSS_MQ_FEATURE_OP_GTE;
-        } else if (op == CSS_MQ_FEATURE_OP_LTE) {
             op = CSS_MQ_FEATURE_OP_GT;
+        } else if (op == CSS_MQ_FEATURE_OP_LTE) {
+            op = CSS_MQ_FEATURE_OP_GTE;
         } else if (op == CSS_MQ_FEATURE_OP_GT) {
-            op = CSS_MQ_FEATURE_OP_LTE;
-        } else if (op == CSS_MQ_FEATURE_OP_GTE) {
             op = CSS_MQ_FEATURE_OP_LT;
+        } else if (op == CSS_MQ_FEATURE_OP_GTE) {
+            op = CSS_MQ_FEATURE_OP_LTE;
         }
     }
     result->op = op;
@@ -396,7 +397,7 @@ static css_error mq_parse_range(lwc_string **strings, const parserutils_vector *
         result->value.data.num_or_ratio = ratio;
     } else {
         /* num/dim/ident */
-        error = mq_populate_value(&result->value, name_or_value);
+        error = mq_populate_value(&result->value, name_first ? value_or_name : name_or_value);
         if (error != CSS_OK) {
             css__mq_feature_destroy(result);
             return error;

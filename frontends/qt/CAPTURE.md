@@ -163,6 +163,9 @@ with flex alignment/direction/growth and grid auto-flow values. This is not a
 complete modern CSS serializer. The font report identifies the primary font;
 individual glyph fallback can use additional fonts.
 
+IMG state includes `complete`, `current_src`, and density-corrected
+`natural_width`/`natural_height`, read from the native request without running JS.
+
 Find-in-page actions (`--capture-find`, `--capture-find-back`, `--capture-find-all`
 and `--capture-find-case`) accept query text; an empty `--capture-find` clears it.
 Inspected boxes report `highlighted_fragments` and the generated-text subsets

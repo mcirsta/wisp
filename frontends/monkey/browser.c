@@ -155,8 +155,11 @@ static void gui_window_stop_throbber(struct gui_window *g)
  */
 static nserror gui_window_set_scroll(struct gui_window *gw, const struct rect *rect)
 {
+    bool changed = gw->scrollx != rect->x0 || gw->scrolly != rect->y0;
     gw->scrollx = rect->x0;
     gw->scrolly = rect->y0;
+    if (changed)
+        browser_window_scroll_changed(gw->bw);
 
     moutf(MOUT_WINDOW, "SET_SCROLL WIN %u X %d Y %d", gw->win_num, rect->x0, rect->y0);
     return NSERROR_OK;

@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <libcss/font_face.h>
+#include <libcss/select.h>
 
 #include "parse/declarations.h"
 #include "parse/declaration_order.h"
@@ -5806,6 +5807,50 @@ static void unexpected_string(lwc_string *string, void *pw)
     fprintf(stderr, "Leaked interned string: %.*s\n", (int)lwc_string_length(string), lwc_string_data(string));
 }
 
+
+START_TEST(test_computed_fixed_serialization)
+{
+    const struct { css_fixed value; const char *text; } cases[] = {
+        {0, "0"}, {F_1, "1"}, {F_1 / 2, "0.5"}, {1, "0.000977"},
+        {-1, "-0.000977"}, {INT32_MIN, "-2097152"}, {INT32_MAX, "2097151.999023"}
+    };
+    for (unsigned i = 0; i < sizeof(cases) / sizeof(*cases); i++) {
+        lwc_string *text = NULL;
+        ck_assert_int_eq(css__declaration_fixed_serialize(cases[i].value, &text), CSS_OK);
+        ck_assert_str_eq(lwc_string_data(text), cases[i].text);
+        lwc_string_unref(text);
+    }
+}
+END_TEST
+
+START_TEST(test_cssom_pseudo_parser)
+{
+    const struct { const char *text; css_pseudo_element pseudo; } valid[] = {
+        {":before", CSS_PSEUDO_ELEMENT_BEFORE}, {"::AFTER", CSS_PSEUDO_ELEMENT_AFTER},
+        {"::b\\65 fore", CSS_PSEUDO_ELEMENT_BEFORE}, {"::/**/before", CSS_PSEUDO_ELEMENT_BEFORE},
+        {"::first-line", CSS_PSEUDO_ELEMENT_FIRST_LINE}, {":first-letter", CSS_PSEUDO_ELEMENT_FIRST_LETTER},
+        {"::marker", CSS_PSEUDO_ELEMENT_MARKER}, {"::placeholder ", CSS_PSEUDO_ELEMENT_PLACEHOLDER}
+    };
+    for (unsigned i = 0; i < sizeof(valid) / sizeof(*valid); i++) {
+        css_pseudo_element result;
+        ck_assert_msg(css_parse_pseudo_element((const uint8_t *)valid[i].text, strlen(valid[i].text), &result) == CSS_OK,
+            "Rejected pseudo %s", valid[i].text);
+        ck_assert_int_eq(result, valid[i].pseudo);
+    }
+    const char *invalid[] = {"", "before", ":marker", ":::before", ": before", "::before()", "::before junk",
+        "::part(x)", "::slotted(*)", "::unknown", "::before::after", "::b\xc3\xa9" "fore"};
+    for (unsigned i = 0; i < sizeof(invalid) / sizeof(*invalid); i++) {
+        css_pseudo_element result;
+        ck_assert_msg(css_parse_pseudo_element((const uint8_t *)invalid[i], strlen(invalid[i]), &result) == CSS_INVALID,
+            "Accepted pseudo %s", invalid[i]);
+        ck_assert_int_eq(result, CSS_PSEUDO_ELEMENT_COUNT);
+    }
+    css_pseudo_element result;
+    const uint8_t embedded[] = ":before\0junk";
+    ck_assert_int_eq(css_parse_pseudo_element(embedded, sizeof(embedded) - 1, &result), CSS_INVALID);
+}
+END_TEST
+
 int main(void)
 {
     Suite *suite = suite_create("CSS declaration capture");
@@ -5875,6 +5920,8 @@ int main(void)
     tcase_add_loop_test(tc, test_long_url, 0, 2);
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
+    tcase_add_test(tc, test_computed_fixed_serialization);
+    tcase_add_test(tc, test_cssom_pseudo_parser);
 #ifdef WISP_TEST_ALLOC_FAILURE
     tcase_add_loop_test(tc, test_value_allocation_failure, 0, 67);
     tcase_add_loop_test(tc, test_system_font_allocation_failure, 0, 3);

@@ -4,6 +4,7 @@
  */
 #include "dom.h"
 #include "content/handlers/css/inline.h"
+#include "content/handlers/html/css.h"
 #include <wisp/content/handlers/html/private.h>
 #include <wisp/utils/corestrings.h>
 #include <wisp/utils/nsurl.h>
@@ -11,6 +12,8 @@
 
 struct style_object {
     JSValue element, properties;
+    bool computed;
+    int pseudo; /* CSS_PSEUDO_ELEMENT_COUNT denotes an invalid pseudo argument. */
 };
 
 static void style_finalizer(JSRuntime *rt, JSValue object)
@@ -52,10 +55,25 @@ static struct nscss_inline_style *style_native(JSContext *ctx, struct qjs_dom_no
 {
     jsthread *thread = JS_GetContextOpaque(ctx);
     html_content *html = thread->doc_priv;
-    nscss_inline_params(params, html->base_url != NULL ? nsurl_access(html->base_url) : "about:blank",
-        html->quirks != DOM_DOCUMENT_QUIRKS_MODE_NONE);
+    dom_document *owner = NULL;
+    dom_string *uri = NULL;
+    dom_document_quirks_mode quirks = html->quirks;
+    dom_exception error = dom_node_get_owner_document(node->node, &owner);
+    const char *url = html->base_url != NULL ? nsurl_access(html->base_url) : "about:blank";
+    if (error == DOM_NO_ERR && owner != html->document) {
+        error = dom_document_get_quirks_mode(owner, &quirks);
+        if (error == DOM_NO_ERR)
+            error = dom_document_get_uri(owner, &uri);
+        url = uri != NULL ? dom_string_data(uri) : "about:blank";
+    }
+    nscss_inline_params(params, url, quirks != DOM_DOCUMENT_QUIRKS_MODE_NONE);
+    /* params borrows the URL for synchronous CSS calls below. The node keeps
+     * its native owner (and that owner's URI) alive; no JS runs during parsing. */
+    dom_string_unref(uri);
+    dom_node_unref(owner);
     struct nscss_inline_style *style;
-    dom_exception error = nscss_inline_style_get(node->node, params, &style);
+    if (error == DOM_NO_ERR)
+        error = nscss_inline_style_get(node->node, params, &style);
     if (error != DOM_NO_ERR) {
         qjs_dom_exception(ctx, error);
         return NULL;
@@ -87,16 +105,8 @@ static struct qjs_dom_node *element_receiver(JSContext *ctx, JSValueConst object
     return node;
 }
 
-static JSValue element_style(JSContext *ctx, JSValueConst object, int kind)
+static JSValue style_create(JSContext *ctx, JSValueConst object, bool computed, int pseudo)
 {
-    struct qjs_dom_node *node = element_receiver(ctx, object, kind);
-    if (node == NULL)
-        return JS_EXCEPTION;
-    if (!JS_IsUndefined(node->style))
-        return JS_DupValue(ctx, node->style);
-    css_stylesheet_params params;
-    if (style_native(ctx, node, &params) == NULL)
-        return JS_EXCEPTION;
     jsthread *thread = JS_GetContextOpaque(ctx);
     JSValue result = JS_NewObjectClass(ctx, thread->heap->style_class);
     if (JS_IsException(result))
@@ -108,13 +118,101 @@ static JSValue element_style(JSContext *ctx, JSValueConst object, int kind)
     }
     style->element = JS_DupValue(ctx, object);
     style->properties = JS_NewObjectProto(ctx, JS_NULL);
+    style->computed = computed;
+    style->pseudo = pseudo;
     JS_SetOpaque(result, style);
     if (JS_IsException(style->properties)) {
         JS_FreeValue(ctx, result);
         return JS_EXCEPTION;
     }
-    node->style = JS_DupValue(ctx, result);
     return result;
+}
+
+static JSValue element_style(JSContext *ctx, JSValueConst object, int kind)
+{
+    struct qjs_dom_node *node = element_receiver(ctx, object, kind);
+    if (node == NULL)
+        return JS_EXCEPTION;
+    if (!JS_IsUndefined(node->style))
+        return JS_DupValue(ctx, node->style);
+    css_stylesheet_params params;
+    if (style_native(ctx, node, &params) == NULL)
+        return JS_EXCEPTION;
+    JSValue result = style_create(ctx, object, false, CSS_PSEUDO_ELEMENT_NONE);
+    if (!JS_IsException(result))
+        node->style = JS_DupValue(ctx, result);
+    return result;
+}
+
+static JSValue window_computed_style(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv)
+{
+    JSValue global = JS_GetGlobalObject(ctx);
+    bool window = JS_IsUndefined(object) || JS_IsNull(object) || JS_IsStrictEqual(ctx, object, global);
+    JS_FreeValue(ctx, global);
+    if (!window)
+        return JS_ThrowTypeError(ctx, "Window receiver required");
+    if (argc == 0)
+        return JS_ThrowTypeError(ctx, "getComputedStyle requires an Element");
+    if (qjs_dom_get(ctx, argv[0], DOM_ELEMENT_NODE) == NULL)
+        return JS_EXCEPTION;
+    css_pseudo_element pseudo = CSS_PSEUDO_ELEMENT_NONE;
+    if (argc > 1 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1])) {
+        dom_string *text = qjs_dom_string(ctx, argv[1], false);
+        if (text == NULL)
+            return JS_EXCEPTION;
+        css_error error = CSS_OK;
+        if (dom_string_byte_length(text) != 0 && dom_string_data(text)[0] == ':')
+            error = css_parse_pseudo_element((const uint8_t *)dom_string_data(text), dom_string_byte_length(text), &pseudo);
+        dom_string_unref(text);
+        if (error == CSS_INVALID)
+            pseudo = CSS_PSEUDO_ELEMENT_COUNT;
+        else if (error != CSS_OK)
+            return style_css_error(ctx, error);
+    }
+    if (qjs_dom_get(ctx, argv[0], DOM_ELEMENT_NODE) == NULL)
+        return JS_EXCEPTION;
+    return style_create(ctx, argv[0], true, pseudo);
+}
+
+static int computed_connected(JSContext *ctx, const struct style_object *style, const struct qjs_dom_node *node)
+{
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    html_content *html = thread->doc_priv;
+    if (style->pseudo == CSS_PSEUDO_ELEMENT_COUNT || html == NULL || !qjs_dom_is_active_document(ctx, node->node))
+        return 0;
+    bool connected = false;
+    dom_exception error = dom_node_contains(html->document, node->node, &connected);
+    if (error != DOM_NO_ERR) {
+        qjs_dom_exception(ctx, error);
+        return -1;
+    }
+    return connected;
+}
+
+static JSValue computed_value(JSContext *ctx, struct style_object *style, struct qjs_dom_node *node,
+    const char *name, size_t length)
+{
+    int connected = computed_connected(ctx, style, node);
+    if (connected <= 0)
+        return connected < 0 ? JS_EXCEPTION : JS_NewString(ctx, "");
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    html_content *html = thread->doc_priv;
+    qjs_dom_flush(thread);
+    nserror error = html_update_layout(html);
+    struct html_computed_style native = {0};
+    if (error == NSERROR_OK)
+        error = html_computed_style_get(html, node->node, style->pseudo, &native);
+    if (error != NSERROR_OK)
+        return error == NSERROR_NOMEM ? JS_ThrowOutOfMemory(ctx) : JS_ThrowInternalError(ctx, "Style unavailable");
+    lwc_string *text = NULL;
+    css_error css_error = native.style != NULL ? css_computed_property_value(native.style, name, length, &text)
+                                              : CSS_INVALID;
+    html_computed_style_fini(&native);
+    /* An unimplemented family is an explicit limitation, never an empty value
+     * pretending that an implemented CSS property is absent. */
+    if (css_error == CSS_INVALID)
+        return qjs_dom_exception(ctx, DOM_NOT_SUPPORTED_ERR);
+    return style_string(ctx, css_error, text);
 }
 
 static JSValue element_style_set(JSContext *ctx, JSValueConst object, JSValueConst value, int kind)
@@ -143,6 +241,15 @@ static JSValue style_get(JSContext *ctx, JSValueConst object, int property)
         return JS_EXCEPTION;
     if (property == STYLE_PARENT)
         return JS_NULL;
+    struct style_object *wrapper = style_receiver(ctx, object);
+    if (wrapper->computed) {
+        if (property == STYLE_TEXT)
+            return JS_NewString(ctx, "");
+        int connected = computed_connected(ctx, wrapper, node);
+        size_t count;
+        css_declarations_supported_longhands(&count);
+        return connected < 0 ? JS_EXCEPTION : JS_NewUint32(ctx, connected ? count : 0);
+    }
     css_stylesheet_params params;
     struct nscss_inline_style *style = style_native(ctx, node, &params);
     if (style == NULL)
@@ -175,6 +282,10 @@ static JSValue style_text_set(JSContext *ctx, JSValueConst object, JSValueConst 
     if (text == NULL)
         return JS_EXCEPTION;
     struct qjs_dom_node *node = style_element(ctx, object);
+    if (node != NULL && style_receiver(ctx, object)->computed) {
+        dom_string_unref(text);
+        return qjs_dom_exception(ctx, DOM_NO_MODIFICATION_ALLOWED_ERR);
+    }
     css_stylesheet_params params;
     struct nscss_inline_style *style = node == NULL ? NULL : style_native(ctx, node, &params);
     css_declarations *candidate = NULL;
@@ -213,6 +324,18 @@ static JSValue style_method(JSContext *ctx, JSValueConst object, int argc, JSVal
             goto out;
     }
     struct qjs_dom_node *node = style_element(ctx, object);
+    if (node == NULL)
+        goto out;
+    struct style_object *wrapper = style_receiver(ctx, object);
+    if (wrapper->computed) {
+        if (method == STYLE_SET || method == STYLE_REMOVE)
+            result = qjs_dom_exception(ctx, DOM_NO_MODIFICATION_ALLOWED_ERR);
+        else if (method == STYLE_PRIORITY)
+            result = JS_NewString(ctx, "");
+        else
+            result = computed_value(ctx, wrapper, node, dom_string_data(args[0]), dom_string_byte_length(args[0]));
+        goto out;
+    }
     css_stylesheet_params params;
     struct nscss_inline_style *style = node == NULL ? NULL : style_native(ctx, node, &params);
     if (style == NULL)
@@ -271,6 +394,15 @@ static JSValue style_item(JSContext *ctx, JSValueConst object, int argc, JSValue
     if (JS_ToUint32(ctx, &index, argv[0]) < 0)
         return JS_EXCEPTION;
     struct qjs_dom_node *node = style_element(ctx, object);
+    if (node == NULL)
+        return JS_EXCEPTION;
+    struct style_object *wrapper = style_receiver(ctx, object);
+    if (wrapper->computed) {
+        int connected = computed_connected(ctx, wrapper, node);
+        size_t count;
+        const char *const *names = css_declarations_supported_longhands(&count);
+        return connected < 0 ? JS_EXCEPTION : JS_NewString(ctx, connected && index < count ? names[index] : "");
+    }
     css_stylesheet_params params;
     struct nscss_inline_style *style = node == NULL ? NULL : style_native(ctx, node, &params);
     if (style == NULL)
@@ -313,6 +445,25 @@ static int style_get_own(JSContext *ctx, JSPropertyDescriptor *desc, JSValueCons
     if (indexed <= 0)
         return indexed < 0 ? -1 : JS_GetOwnProperty(ctx, desc, style->properties, key);
     struct qjs_dom_node *node = style_element(ctx, object);
+    if (node == NULL)
+        return -1;
+    if (style->computed) {
+        int connected = computed_connected(ctx, style, node);
+        size_t count;
+        const char *const *names = css_declarations_supported_longhands(&count);
+        if (connected < 0)
+            return -1;
+        if (!connected || index >= count)
+            return 0;
+        if (desc != NULL) {
+            desc->flags = JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE;
+            desc->getter = desc->setter = JS_UNDEFINED;
+            desc->value = JS_NewString(ctx, names[index]);
+            if (JS_IsException(desc->value))
+                return -1;
+        }
+        return 1;
+    }
     css_stylesheet_params params;
     struct nscss_inline_style *native = node == NULL ? NULL : style_native(ctx, node, &params);
     if (native == NULL)
@@ -509,6 +660,11 @@ int qjs_dom_install_style(JSContext *ctx, JSValue *prototypes)
         JS_SetPropertyFunctionList(ctx, prototypes[QJS_SVG_ELEMENT], accessor + 1, 1) < 0 ||
         JS_SetPropertyStr(ctx, global, "CSSStyleDeclaration", JS_DupValue(ctx, ctor)) < 0 ||
         JS_SetPropertyStr(ctx, global, "CSSStyleProperties", JS_DupValue(ctx, derived)) < 0)
+        goto out;
+    static const JSCFunctionListEntry computed[] = {
+        JS_CFUNC_DEF2("getComputedStyle", 1, window_computed_style, JS_PROP_C_W_E),
+    };
+    if (JS_SetPropertyFunctionList(ctx, global, computed, sizeof(computed) / sizeof(*computed)) < 0)
         goto out;
     JS_SetClassProto(ctx, *id, JS_DupValue(ctx, proto));
     result = 0;

@@ -325,7 +325,7 @@ css_select_results *nscss_get_style(nscss_select_ctx *ctx, dom_node *n, const cs
 css_computed_style *
 nscss_get_blank_style(nscss_select_ctx *ctx, const css_unit_ctx *unit_len_ctx, const css_computed_style *parent)
 {
-    css_computed_style *partial, *composed;
+    css_computed_style *partial, *composed = NULL;
     css_error error;
 
     error = css_select_default_style(ctx->ctx, &selection_handler, ctx, &partial);

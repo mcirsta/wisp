@@ -9,6 +9,9 @@
 #include <string.h>
 
 struct listener;
+struct view_handlers {
+    JSValue callback[2], listener[2];
+};
 struct qjs_event_target {
     dom_event_target *native;
     struct listener *listeners;
@@ -17,6 +20,7 @@ struct qjs_event_target {
     bool node;
     uint64_t node_id;
     JSValue object; /* Borrowed identity; temporarily rooted while closing. */
+    struct view_handlers *view_handlers; /* Allocated only for Window IDL handlers. */
 };
 
 struct listener {
@@ -69,10 +73,18 @@ static void listener_remove(void *pw)
     /* listener can now be freed, or retained by a native invocation snapshot. */
 }
 
-static void target_clear(struct qjs_event_target *target)
+static void target_clear(struct qjs_event_target *target, JSRuntime *rt)
 {
     while (target->listeners != NULL)
         listener_remove(target->listeners);
+    if (target->view_handlers != NULL) {
+        for (unsigned i = 0; i < 2; i++) {
+            JS_FreeValueRT(rt, target->view_handlers->callback[i]);
+            JS_FreeValueRT(rt, target->view_handlers->listener[i]);
+        }
+        js_free_rt(rt, target->view_handlers);
+        target->view_handlers = NULL;
+    }
 }
 
 static void target_detach(struct qjs_event_target *target)
@@ -91,7 +103,7 @@ static void target_finalizer(JSRuntime *rt, JSValue object)
     struct qjs_event_target *target = JS_GetOpaque(object, JS_GetClassID(object));
     if (target != NULL) {
         target_detach(target);
-        target_clear(target);
+        target_clear(target, rt);
         dom_event_target_unref(target->native);
         js_free_rt(rt, target);
     }
@@ -105,6 +117,11 @@ static void target_mark(JSRuntime *rt, JSValueConst object, JS_MarkFunc *mark)
             JS_MarkValue(rt, l->callback, mark);
             JS_MarkValue(rt, l->signal, mark);
         }
+    if (target != NULL && target->view_handlers != NULL)
+        for (unsigned i = 0; i < 2; i++) {
+            JS_MarkValue(rt, target->view_handlers->callback[i], mark);
+            JS_MarkValue(rt, target->view_handlers->listener[i], mark);
+        }
 }
 
 void qjs_events_close(jsthread *thread)
@@ -113,7 +130,7 @@ void qjs_events_close(jsthread *thread)
         struct qjs_event_target *target = thread->event_targets;
         JSValue owner = JS_DupValue(thread->ctx, target->object);
         target_detach(target);
-        target_clear(target);
+        target_clear(target, thread->heap->rt);
         dom_event_target_unref(target->native);
         target->native = NULL;
         JS_FreeValue(thread->ctx, owner);
@@ -479,6 +496,90 @@ int qjs_event_target_listen(JSContext *ctx, JSValueConst target, const char *typ
     return JS_IsException(result) ? -1 : 0;
 }
 
+/* Window IDL event handlers are independent registrations, so replacing a
+ * callback retains its ordering relative to addEventListener registrations. */
+static struct qjs_event_target *window_handler_target(JSContext *ctx, JSValueConst object)
+{
+    bool window;
+    JSValue owner = target_owner(ctx, object, &window);
+    if (JS_IsException(owner))
+        return NULL;
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    struct qjs_event_target *target = window ? JS_GetOpaque(owner, thread->heap->event_target_class) : NULL;
+    JS_FreeValue(ctx, owner);
+    if (!window)
+        JS_ThrowTypeError(ctx, "Window receiver required");
+    return target;
+}
+
+static JSValue window_handler_invoke(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv, int kind)
+{
+    struct qjs_event_target *target = window_handler_target(ctx, object);
+    if (target == NULL)
+        return JS_EXCEPTION;
+    if (target->view_handlers == NULL || !JS_IsFunction(ctx, target->view_handlers->callback[kind]))
+        return JS_UNDEFINED; /* Web IDL LegacyTreatNonObjectAsNull: non-callable objects do nothing. */
+    JSValue callback = JS_DupValue(ctx, target->view_handlers->callback[kind]);
+    JSValue result = JS_Call(ctx, callback, object, argc, argv);
+    JS_FreeValue(ctx, callback);
+    if (JS_IsBool(result) && !JS_ToBool(ctx, result) && argc > 0) {
+        struct qjs_event *event = qjs_event_get(ctx, argv[0]);
+        if (event != NULL)
+            dom_event_prevent_default(event->native);
+    }
+    return result;
+}
+
+static JSValue window_handler_get(JSContext *ctx, JSValueConst object, int kind)
+{
+    struct qjs_event_target *target = window_handler_target(ctx, object);
+    return target == NULL ? JS_EXCEPTION : target->view_handlers == NULL ? JS_NULL
+        : JS_DupValue(ctx, target->view_handlers->callback[kind]);
+}
+
+static JSValue window_handler_set(JSContext *ctx, JSValueConst object, JSValueConst value, int kind)
+{
+    struct qjs_event_target *target = window_handler_target(ctx, object);
+    if (target == NULL)
+        return JS_EXCEPTION;
+    const char *type = kind == 0 ? "scroll" : "resize";
+    if (!JS_IsObject(value))
+        value = JS_NULL;
+    struct view_handlers *handlers = target->view_handlers;
+    if (handlers == NULL) {
+        if (JS_IsNull(value))
+            return JS_UNDEFINED;
+        handlers = js_malloc(ctx, sizeof(*handlers));
+        if (handlers == NULL)
+            return JS_EXCEPTION;
+        for (unsigned i = 0; i < 2; i++)
+            handlers->callback[i] = handlers->listener[i] = JS_NULL;
+        target->view_handlers = handlers;
+    }
+    if (JS_IsNull(value)) {
+        if (!JS_IsNull(handlers->listener[kind])) {
+            if (qjs_event_target_listen(ctx, object, type, handlers->listener[kind], false) < 0)
+                return JS_EXCEPTION;
+            JS_FreeValue(ctx, handlers->listener[kind]);
+            handlers->listener[kind] = JS_NULL;
+        }
+    } else if (JS_IsNull(handlers->listener[kind])) {
+        JSValue listener = JS_NewCFunctionMagic(ctx, window_handler_invoke, "", 1, JS_CFUNC_generic_magic, kind);
+        if (JS_IsException(listener))
+            return listener;
+        if (qjs_event_target_listen(ctx, object, type, listener, true) < 0) {
+            JS_FreeValue(ctx, listener);
+            return JS_EXCEPTION;
+        }
+        handlers->listener[kind] = listener;
+    }
+    JSValue previous = handlers->callback[kind];
+    handlers->callback[kind] = JS_DupValue(ctx, value);
+    JS_FreeValue(ctx, previous);
+    qjs_trace(ctx, "event.handler", "type=%s active=%d", type, !JS_IsNull(value));
+    return JS_UNDEFINED;
+}
+
 static JSValue
 dispatch_event(JSContext *ctx, JSValueConst object, JSValueConst value, bool script, JSValueConst target_override)
 {
@@ -490,9 +591,10 @@ dispatch_event(JSContext *ctx, JSValueConst object, JSValueConst value, bool scr
     JSValue result = JS_EXCEPTION;
     if (event == NULL)
         goto out;
-    bool active;
+    bool active, initialized;
     dom_event_in_dispatch(event->native, &active);
-    if (active) {
+    dom_event_is_initialised(event->native, &initialized);
+    if (active || !initialized) {
         qjs_dom_exception(ctx, DOM_INVALID_STATE_ERR);
         goto out;
     }
@@ -579,11 +681,18 @@ int qjs_init_event_target(JSContext *ctx)
     JSValue global = JS_GetGlobalObject(ctx), proto = JS_NewObject(ctx);
     JSValue ctor = JS_NewCFunction2(ctx, target_constructor, "EventTarget", 0, JS_CFUNC_constructor, 0);
     int ret = -1;
+    static const JSCFunctionListEntry handlers[] = {
+        JS_CGETSET_MAGIC_DEF2("onscroll", window_handler_get, window_handler_set, 0,
+            JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE),
+        JS_CGETSET_MAGIC_DEF2("onresize", window_handler_get, window_handler_set, 1,
+            JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE),
+    };
     if (JS_IsException(proto) || JS_IsException(ctor) ||
         JS_SetPropertyFunctionList(
             ctx, proto, target_properties, sizeof(target_properties) / sizeof(*target_properties)) < 0 ||
         qjs_event_define_interface(ctx, global, "EventTarget", ctor, proto) < 0 ||
-        JS_SetPrototype(ctx, global, proto) < 0)
+        JS_SetPrototype(ctx, global, proto) < 0 ||
+        JS_SetPropertyFunctionList(ctx, global, handlers, sizeof(handlers) / sizeof(*handlers)) < 0)
         goto out;
     JS_SetClassProto(ctx, *id, JS_DupValue(ctx, proto));
     if (thread != NULL) {

@@ -18,9 +18,16 @@ div { position: absolute; top: 30px; width: 20px; height: 20px; background: #024
 #grid { left: 90px; transform: translate(1fr); }
 #second-grid { left: 170px; transform: translate(0, 1fr); }
 #unitless { left: 250px; transform: translate(40); }
+/* Transforms use the border-box reference, including padding and borders. */
+.bordered { top: 210px; padding: 5px; border: 2px solid #024; }
+#border-percent { left: 10px; transform: translate(100%,100%); }
+#border-scale { left: 120px; transform: scale(2); }
+#font-translate { left: 210px; top: 210px; font-size: 20px; transform: translate(2em,1em); }
 </style>
 <div id="translate"></div><div id="translate-y"></div><div id="scale"></div>
 <div id="scale-x"></div><div id="scale-y"></div><div id="rotate"></div>
 <div id="percent"></div><div id="zero"></div>
 <div id="angle" class="invalid"></div><div id="grid" class="invalid"></div>
 <div id="second-grid" class="invalid"></div><div id="unitless" class="invalid"></div>
+<div id="border-percent" class="bordered"></div><div id="border-scale" class="bordered"></div>
+<div id="font-translate"></div>

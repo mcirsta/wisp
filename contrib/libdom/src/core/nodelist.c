@@ -17,10 +17,15 @@
 #include <dom/core/string.h>
 
 #include "core/document.h"
+#include "core/element.h"
 #include "core/node.h"
 #include "core/nodelist.h"
 
 #include "utils/utils.h"
+
+struct class_token {
+    size_t start, length;
+};
 
 /**
  * DOM node list
@@ -46,10 +51,56 @@ struct dom_nodelist {
             dom_string *namespace; /**< Namespace */
             dom_string *localname; /**< Localname */
         } ns; /**< Data for namespace matching */
+        struct {
+            dom_string *query;
+            struct class_token *tokens;
+            size_t count;
+        } classes;
     } data;
 
     uint32_t refcnt; /**< Reference count */
 };
+
+static bool class_space(unsigned char c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
+}
+
+/* Store slices of the retained query: no string allocation or interning while
+ * visiting elements. Duplicate query tokens need not be matched twice. */
+static dom_exception class_query_init(dom_nodelist *list, dom_string *query)
+{
+    const char *bytes = dom_string_data(query);
+    size_t length = dom_string_byte_length(query), capacity = 0;
+    for (size_t i = 0; i < length; i++) {
+        if (!class_space(bytes[i]) && (i == 0 || class_space(bytes[i - 1])))
+            capacity++;
+    }
+    if (capacity != 0) {
+        list->data.classes.tokens = calloc(capacity, sizeof(struct class_token));
+        if (list->data.classes.tokens == NULL)
+            return DOM_NO_MEM_ERR;
+    }
+    for (size_t i = 0; i < length;) {
+        if (class_space(bytes[i])) {
+            i++;
+            continue;
+        }
+        size_t start = i;
+        while (i < length && !class_space(bytes[i]))
+            i++;
+        size_t n = i - start, j;
+        for (j = 0; j < list->data.classes.count; j++) {
+            struct class_token token = list->data.classes.tokens[j];
+            if (token.length == n && memcmp(bytes + token.start, bytes + start, n) == 0)
+                break;
+        }
+        if (j == list->data.classes.count)
+            list->data.classes.tokens[list->data.classes.count++] = (struct class_token){start, n};
+    }
+    list->data.classes.query = dom_string_ref(query);
+    return DOM_NO_ERR;
+}
 
 /**
  * Create a nodelist
@@ -105,6 +156,14 @@ dom_exception _dom_nodelist_create(dom_document *doc, nodelist_type type, dom_no
                 free(l);
                 return err;
             }
+        }
+    } else if (type == DOM_NODELIST_BY_CLASS) {
+        dom_exception err = class_query_init(l, tagname);
+        if (err != DOM_NO_ERR) {
+            dom_node_unref(root);
+            dom_node_unref(doc);
+            free(l);
+            return err;
         }
     } else if (type == DOM_NODELIST_BY_NAMESPACE) {
         l->data.ns.any_localname = false;
@@ -175,6 +234,10 @@ void dom_nodelist_unref(dom_nodelist *list)
             if (list->data.ns.localname != NULL)
                 dom_string_unref(list->data.ns.localname);
             break;
+        case DOM_NODELIST_BY_CLASS:
+            dom_string_unref(list->data.classes.query);
+            free(list->data.classes.tokens);
+            break;
         case DOM_NODELIST_BY_NAME:
             assert(list->data.n.name != NULL);
             dom_string_unref(list->data.n.name);
@@ -210,6 +273,56 @@ static bool qualified_name_matches(const dom_node_internal *node, dom_string *na
         memcmp(bytes + prefix + 1, dom_string_data(node->name), local) == 0;
 }
 
+static bool class_token_matches(const char *a, const char *b, size_t length, bool quirks)
+{
+    if (!quirks)
+        return memcmp(a, b, length) == 0;
+    for (size_t i = 0; i < length; i++) {
+        unsigned char x = a[i], y = b[i];
+        if (x >= 'A' && x <= 'Z')
+            x += 'a' - 'A';
+        if (y >= 'A' && y <= 'Z')
+            y += 'a' - 'A';
+        if (x != y)
+            return false;
+    }
+    return true;
+}
+
+static bool class_query_matches(const dom_nodelist *list, const dom_element *element)
+{
+    if (list->data.classes.count == 0)
+        return false;
+    /* Read the root's current document, including after subtree adoption.
+     * Limited quirks does not make class matching case-insensitive. */
+    bool quirks = list->root->owner->quirks == DOM_DOCUMENT_QUIRKS_MODE_FULL;
+    const char *query = dom_string_data(list->data.classes.query);
+    for (size_t i = 0; i < list->data.classes.count; i++) {
+        struct class_token token = list->data.classes.tokens[i];
+        uint32_t j;
+        for (j = 0; j < element->n_classes; j++) {
+            lwc_string *name = element->classes[j];
+            if (lwc_string_length(name) == token.length &&
+                class_token_matches(query + token.start, lwc_string_data(name), token.length, quirks))
+                break;
+        }
+        if (j == element->n_classes)
+            return false;
+    }
+    return true;
+}
+
+/* DOM's list-of-elements-with-class-names algorithm uses the same live walk as
+ * tag queries. The JS binding presents it as an HTMLCollection. */
+dom_exception dom_node_get_elements_by_class_name(dom_node *root, dom_string *classes, dom_nodelist **result)
+{
+    dom_node_internal *node = (dom_node_internal *)root;
+    *result = NULL;
+    if (node->type != DOM_DOCUMENT_NODE && node->type != DOM_ELEMENT_NODE)
+        return DOM_NOT_SUPPORTED_ERR;
+    return _dom_document_get_nodelist(node->owner, DOM_NODELIST_BY_CLASS, node, classes, NULL, NULL, result);
+}
+
 /* Shared by length, item and the one-pass visitor: all observe the same live
  * filter. DOM's tag query folds the query only for HTML-namespace elements in
  * an HTML document; namespace/local-name queries are always exact. */
@@ -219,6 +332,8 @@ static bool nodelist_matches(const dom_nodelist *list, const dom_node_internal *
         return true;
     if (node->type != DOM_ELEMENT_NODE)
         return false;
+    if (list->type == DOM_NODELIST_BY_CLASS)
+        return class_query_matches(list, (const dom_element *)node);
     if (list->type == DOM_NODELIST_BY_NAME) {
         if (list->data.n.any_name)
             return true;
@@ -302,6 +417,8 @@ bool _dom_nodelist_match(dom_nodelist *list, nodelist_type type, dom_node_intern
     switch (list->type) {
     case DOM_NODELIST_CHILDREN:
         return true;
+    case DOM_NODELIST_BY_CLASS:
+        return dom_string_isequal(list->data.classes.query, tagname);
     case DOM_NODELIST_BY_NAME:
         return dom_string_isequal(list->data.n.name, tagname);
     case DOM_NODELIST_BY_NAMESPACE:
@@ -323,6 +440,8 @@ bool _dom_nodelist_equal(dom_nodelist *l1, dom_nodelist *l2)
 {
     if (l1->type != l2->type)
         return false;
+    if (l2->type == DOM_NODELIST_BY_CLASS)
+        return _dom_nodelist_match(l1, l2->type, l2->root, l2->data.classes.query, NULL, NULL);
     if (l2->type == DOM_NODELIST_BY_NAME)
         return _dom_nodelist_match(l1, l2->type, l2->root, l2->data.n.name, NULL, NULL);
     if (l2->type == DOM_NODELIST_BY_NAMESPACE)

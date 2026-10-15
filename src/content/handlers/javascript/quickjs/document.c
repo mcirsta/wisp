@@ -3,6 +3,7 @@
  * APIs are omitted instead of returning dummy nodes, collections or success.
  */
 #include "dom.h"
+#include "event.h"
 #include <wisp/content/handlers/html/private.h>
 #include <string.h>
 
@@ -117,22 +118,29 @@ static JSValue node_get(JSContext *ctx, JSValueConst object, int property)
     case READY_STATE: {
         jsthread *thread = JS_GetContextOpaque(ctx);
         html_content *html = thread->doc_priv;
-        const char *state = html->readiness == HTML_DOCUMENT_COMPLETE ? "complete"
-            : html->readiness == HTML_DOCUMENT_INTERACTIVE            ? "interactive"
-                                                                      : "loading";
+        const char *state = !qjs_dom_is_active_document(ctx, self->node) || html->readiness == HTML_DOCUMENT_COMPLETE
+            ? "complete"
+            : html->readiness == HTML_DOCUMENT_INTERACTIVE ? "interactive"
+                                                          : "loading";
         return JS_NewString(ctx, state);
     }
     case NODE_TYPE:
         return JS_NewInt32(ctx, self->type);
     case OWNER_DOCUMENT:
-        return self->type == DOM_DOCUMENT_NODE ? JS_NULL : JS_DupValue(ctx, self->owner);
+        err = dom_node_get_owner_document(self->node, (dom_document **)&node);
+        return err == DOM_NO_ERR ? wrap_result(ctx, object, self, node) : qjs_dom_exception(ctx, err);
     case CONNECTED: {
-        JSValue owner = qjs_dom_owner(ctx, object, self);
-        struct qjs_dom_node *doc = qjs_dom_get(ctx, owner, DOM_DOCUMENT_NODE);
-        bool connected = false;
-        err = doc == NULL ? DOM_INVALID_STATE_ERR : dom_node_contains(doc->node, self->node, &connected);
-        JS_FreeValue(ctx, owner);
-        return err == DOM_NO_ERR ? JS_NewBool(ctx, connected) : qjs_dom_exception(ctx, err);
+        /* Connected means rooted in any Document, including a cloned one. */
+        dom_node *root = dom_node_ref(self->node), *parent = NULL;
+        while ((err = dom_node_get_parent_node(root, &parent)) == DOM_NO_ERR && parent != NULL) {
+            dom_node_unref(root);
+            root = parent;
+        }
+        dom_node_type type = 0;
+        if (err == DOM_NO_ERR)
+            err = dom_node_get_node_type(root, &type);
+        dom_node_unref(root);
+        return err == DOM_NO_ERR ? JS_NewBool(ctx, type == DOM_DOCUMENT_NODE) : qjs_dom_exception(ctx, err);
     }
     case PARENT:
     case PARENT_ELEMENT:
@@ -388,6 +396,7 @@ int qjs_dom_install_properties(JSContext *ctx, JSValue *prototypes)
         GET("documentElement", DOCUMENT_ELEMENT),
         GET("head", HEAD),
         GET("body", BODY),
+        JS_CFUNC_DEF2("createEvent", 1, qjs_document_create_event, JS_PROP_C_W_E),
         JS_CFUNC_DEF2("getElementById", 1, document_id, JS_PROP_C_W_E),
     };
     static const JSCFunctionListEntry data[] = {ACCESS("data", DATA)};

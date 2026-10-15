@@ -34,6 +34,7 @@
  * layout_minmax_X() and layout_X().
  */
 
+#include "image.h"
 #include <dom/dom.h>
 #include <assert.h>
 #include <limits.h>
@@ -147,6 +148,8 @@ static void layout_get_replaced_dimensions(
     bool document = (box->flags & IFRAME) || content_get_type(box->object) == CONTENT_HTML;
     int intrinsic_width = document ? 0 : content_get_width(box->object);
     int intrinsic_height = document ? 0 : content_get_height(box->object);
+    int image_ratio_width = intrinsic_width, image_ratio_height = intrinsic_height;
+    bool image_dimensions = !document && html_image_dimensions(box, &intrinsic_width, &intrinsic_height);
     bool contents_skipped = (box->flags & CONTENTS_SKIPPED) != 0;
     if (contents_skipped)
         intrinsic_width = intrinsic_height = 0;
@@ -164,6 +167,10 @@ static void layout_get_replaced_dimensions(
      * ratio (viewBox-only) or the intrinsic dimensions as the ratio source. */
     int eff_ratio_w = has_ratio_only ? ratio_w : intrinsic_width;
     int eff_ratio_h = has_ratio_only ? ratio_h : intrinsic_height;
+    if (image_dimensions && !contents_skipped && !has_ratio_only) {
+        eff_ratio_w = image_ratio_width;
+        eff_ratio_h = image_ratio_height;
+    }
 
     css_fixed css_ratio_w = 0, css_ratio_h = 0;
     uint8_t ratio_type = box->style ? css_computed_aspect_ratio(box->style, &css_ratio_w, &css_ratio_h)
@@ -185,7 +192,7 @@ static void layout_get_replaced_dimensions(
              * use containing block width, compute height from ratio. */
             *width = containing_block_width;
             *height = layout_round_ratio_dimension((double)*width * ratio_h / ratio_w);
-        } else if (intrinsic_width > 0 && intrinsic_height > 0) {
+        } else if ((intrinsic_width > 0 && intrinsic_height > 0) || (image_dimensions && !contents_skipped)) {
             /* Has intrinsic dimensions — use them (existing behavior) */
 
 #ifdef WISP_DEVICE_PIXEL_LAYOUT

@@ -37,6 +37,9 @@ typedef struct dom_document dom_document;
 /**
  * Quirks mode flag
  */
+/* Document type is independent of the namespaces of its elements. */
+bool dom_document_is_html(dom_document *doc);
+
 typedef enum dom_document_quirks_mode {
     DOM_DOCUMENT_QUIRKS_MODE_NONE,
     DOM_DOCUMENT_QUIRKS_MODE_LIMITED,

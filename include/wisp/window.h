@@ -233,6 +233,12 @@ struct gui_window_table {
      */
     nserror (*get_dimensions)(struct gui_window *gw, int *width, int *height);
 
+    /** Viewport including rendered scrollbars, in frontend pixels.
+     * Optional for frontends without separate scrollbar space. Others should
+     * implement this for accurate CSSOM Window dimensions; the fallback is
+     * get_dimensions (the layout area). */
+    nserror (*get_viewport_dimensions)(struct gui_window *gw, int *width, int *height);
+
     /**
      * Get the width of the vertical scrollbar.
      *

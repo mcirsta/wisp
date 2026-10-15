@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 
-WIDTH, HEIGHT = 640, 180
+WIDTH, HEIGHT = 640, 300
 INK, WHITE = (0, 34, 68), (255, 255, 255)
 # Flat interior/exterior samples avoid antialiasing at transformed edges.
 SAMPLES = [
@@ -19,6 +19,9 @@ SAMPLES = [
     ("rotate", 430, 25, INK), ("rotate exterior", 415, 40, WHITE),
     ("percentage translate", 515, 55, INK), ("percentage old position", 500, 40, WHITE),
     ("zero second scale hides content", 580, 40, WHITE),
+    ("border-box percentage", 70, 272, INK), ("border-box percentage exterior", 35, 240, WHITE),
+    ("border-box scale origin", 105, 195, INK), ("border-box scale exterior", 175, 195, WHITE),
+    ("font-relative translate", 255, 235, INK), ("font-relative old position", 215, 215, WHITE),
 ]
 for name, left in (("angle", 10), ("grid", 90), ("second grid", 170), ("unitless", 250)):
     SAMPLES.extend([(name + " fallback", left + 25, 130, INK),

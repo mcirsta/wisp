@@ -292,6 +292,10 @@ nserror browser_window_get_dimensions(struct browser_window *bw, int *width, int
 /** Get the viewport scroll offset in unscaled content coordinates. */
 void browser_window_get_scroll(struct browser_window *bw, int *x, int *y);
 
+/** Frontends call after changing actual viewport offsets, including user scrolls.
+ * Only queues delivery: never invokes JavaScript from a UI callback. */
+void browser_window_scroll_changed(struct browser_window *bw);
+
 /**
  * Get the width of the vertical scrollbar.
  *

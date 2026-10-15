@@ -37,6 +37,8 @@ css_error css_declarations_compile(
 /* Static supported CSS names, including legacy aliases, from the parser's
  * generator. These are feature identities, not a claim of complete grammars. */
 const char *const *css_declarations_supported_properties(size_t *count);
+/* Canonical ordinary longhands in lexicographical order, without aliases. */
+const char *const *css_declarations_supported_longhands(size_t *count);
 
 #ifdef __cplusplus
 }

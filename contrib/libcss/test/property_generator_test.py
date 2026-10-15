@@ -49,6 +49,17 @@ class DeclarationMetadataTest(unittest.TestCase):
         names = [line.strip('",') for line in generator.generate_declaration_names().splitlines()[1:]]
         self.assertEqual(names, sorted(keys))
 
+    def test_computed_names_are_canonical_longhands(self):
+        generator = GEN.MultiFileGenerator(self.reader.get_dispatch_order(), self.reader.prop_map)
+        generator.toml_reader = self.reader
+        names = [line.strip('\",') for line in generator.generate_declaration_longhands().splitlines()[1:]]
+        expected = sorted(name.replace('_', '-') for name, prop in self.reader.toml_data.items()
+                          if not prop.get('declaration_longhands'))
+        self.assertEqual(names, expected)
+        self.assertIn('margin-inline-start', names)
+        self.assertNotIn('grid-column-gap', names)
+        self.assertNotIn('overflow', names)
+
     def test_background_axes_are_native_longhands(self):
         dispatch = {prop['name'] for prop in self.reader.get_dispatch_order()}
         for kind in ('repeat', 'position'):

@@ -73,3 +73,12 @@ const char *const *css_declarations_supported_properties(size_t *count)
     *count = sizeof(names) / sizeof(*names);
     return names;
 }
+
+const char *const *css_declarations_supported_longhands(size_t *count)
+{
+    static const char *const names[] = {
+#include "declaration_longhands.inc"
+    };
+    *count = sizeof(names) / sizeof(*names);
+    return names;
+}

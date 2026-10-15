@@ -87,9 +87,10 @@ static inline bool _dom_element_is_class_space(char c)
  *
  * Destroys any existing cached classes.
  */
-static dom_exception _dom_element_create_classes(struct dom_element *ele, const char *value)
+static dom_exception _dom_element_create_classes(struct dom_element *ele, dom_string *value)
 {
-    const char *pos;
+    const char *pos, *bytes = dom_string_data(value);
+    const char *end = bytes + dom_string_byte_length(value);
     lwc_string **classes = NULL;
     uint32_t n_classes = 0;
 
@@ -97,13 +98,13 @@ static dom_exception _dom_element_create_classes(struct dom_element *ele, const 
     _dom_element_destroy_classes(ele);
 
     /* Count number of classes */
-    for (pos = value; *pos != '\0';) {
+    for (pos = bytes; pos != end;) {
         if (!_dom_element_is_class_space(*pos)) {
-            while (!_dom_element_is_class_space(*pos) && *pos != '\0')
+            while (pos != end && !_dom_element_is_class_space(*pos))
                 pos++;
             n_classes++;
         } else {
-            while (_dom_element_is_class_space(*pos))
+            while (pos != end && _dom_element_is_class_space(*pos))
                 pos++;
         }
     }
@@ -114,15 +115,16 @@ static dom_exception _dom_element_create_classes(struct dom_element *ele, const 
         if (classes == NULL)
             return DOM_NO_MEM_ERR;
 
-        for (pos = value, n_classes = 0; *pos != '\0';) {
+        for (pos = bytes, n_classes = 0; pos != end;) {
             if (!_dom_element_is_class_space(*pos)) {
                 const char *s = pos;
-                while (!_dom_element_is_class_space(*pos) && *pos != '\0')
+                while (pos != end && !_dom_element_is_class_space(*pos))
                     pos++;
-                if (lwc_intern_string(s, pos - s, &classes[n_classes++]) != lwc_error_ok)
+                if (lwc_intern_string(s, pos - s, &classes[n_classes]) != lwc_error_ok)
                     goto error;
+                n_classes++;
             } else {
-                while (_dom_element_is_class_space(*pos))
+                while (pos != end && _dom_element_is_class_space(*pos))
                     pos++;
             }
         }
@@ -331,7 +333,7 @@ _dom_element_attr_list_node_create(dom_attr *attr, dom_element *ele, dom_string 
             return NULL;
         }
 
-        if (DOM_NO_ERR != _dom_element_create_classes(ele, dom_string_data(value))) {
+        if (DOM_NO_ERR != _dom_element_create_classes(ele, value)) {
             _dom_element_attr_list_node_destroy(new_list_node);
             dom_string_unref(value);
             return NULL;
@@ -1582,8 +1584,7 @@ dom_exception _dom_element_set_attribute_internal(
         /* Rebuild class cache if the class attribute was modified */
         if (namespace == NULL &&
             dom_string_isequal(name, doc->class_string)) {
-            _dom_element_create_classes(element,
-                    dom_string_data(value));
+            _dom_element_create_classes(element, value);
         }
 
         success = true;

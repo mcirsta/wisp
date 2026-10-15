@@ -45,6 +45,7 @@
 #include <wisp/utils/nsoption.h>
 #include <wisp/utils/utils.h>
 #include "content/handlers/javascript/js.h"
+#include "content/handlers/html/view_events.h"
 #include "content/textsearch.h"
 #include "desktop/browser_history.h"
 #include "desktop/frames.h"
@@ -1627,6 +1628,7 @@ void html_overflow_scroll_callback(void *client_data, struct scrollbar_msg_data 
 
     switch (scrollbar_data->msg) {
     case SCROLLBAR_MSG_MOVED:
+        html_queue_scroll_event(html, box->node);
 
         if (html->reflowing == true) {
             /* Can't redraw during layout, and it will

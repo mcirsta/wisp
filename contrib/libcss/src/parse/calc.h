@@ -4,6 +4,7 @@
 
 #include "parse/declarations.h"
 #include "bytecode/bytecode.h"
+#include <libcss/unit.h>
 
 /* Locale-independent numeric prefix of a lexer token. Keep its precision for
  * calculation operands and specified-value serialization alike. */
@@ -21,5 +22,10 @@ css_error css__calc_walk(const css_declaration_token *tokens, size_t count, css_
  * On success the caller owns *out; on failure *out is NULL. */
 css_error css__declaration_calc_serialize(const css_declaration_token *tokens, size_t count,
     lwc_string **out);
+
+/* Parse one non-negative length component, using the same typed calc grammar
+ * as declarations. Percentages and non-math functions are invalid. */
+css_error css__calc_length(const parserutils_vector *tokens, int32_t start, int32_t end,
+    const css_unit_ctx *units, double *pixels);
 
 #endif

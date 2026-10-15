@@ -7,8 +7,8 @@
 #include <string.h>
 
 enum collection_kind { CHILD_NODES, CHILD_ELEMENTS };
-enum collection_query { DIRECT_CHILDREN, TAG_NAME, TAG_NAMESPACE };
-enum { QUERY_NAMESPACE = 0x100 };
+enum collection_query { DIRECT_CHILDREN, TAG_NAME, TAG_NAMESPACE, CLASS_NAME };
+enum { QUERY_NAMESPACE = 0x100, QUERY_CLASS = 0x200 };
 
 struct collection {
     JSValue root, properties;
@@ -91,9 +91,9 @@ static JSValue children_get(JSContext *ctx, JSValueConst object, int type)
     return value;
 }
 
-static JSValue elements_by_tag(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv, int magic)
+static JSValue elements_query(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv, int magic)
 {
-    dom_node_type type = magic & ~QUERY_NAMESPACE;
+    dom_node_type type = magic & ~(QUERY_NAMESPACE | QUERY_CLASS);
     bool namespace_query = (magic & QUERY_NAMESPACE) != 0;
     if (qjs_dom_get(ctx, object, type) == NULL)
         return JS_EXCEPTION;
@@ -113,7 +113,7 @@ static JSValue elements_by_tag(JSContext *ctx, JSValueConst object, int argc, JS
         value = collection_create(ctx, object, CHILD_ELEMENTS);
         if (!JS_IsException(value)) {
             struct collection *list = JS_GetOpaque(value, JS_GetClassID(value));
-            list->query = namespace_query ? TAG_NAMESPACE : TAG_NAME;
+            list->query = namespace_query ? TAG_NAMESPACE : (magic & QUERY_CLASS) ? CLASS_NAME : TAG_NAME;
             list->name = dom_string_ref(name);
             list->namespace = dom_string_ref(namespace);
         }
@@ -168,7 +168,9 @@ static int collection_visit(JSContext *ctx, struct collection *list, dom_nodelis
     dom_exception err;
     if (list->query != DIRECT_CHILDREN) {
         dom_nodelist *native = NULL;
-        if (root->type == DOM_DOCUMENT_NODE) {
+        if (list->query == CLASS_NAME) {
+            err = dom_node_get_elements_by_class_name(root->node, list->name, &native);
+        } else if (root->type == DOM_DOCUMENT_NODE) {
             err = list->query == TAG_NAME
                 ? dom_document_get_elements_by_tag_name(root->node, list->name, &native)
                 : dom_document_get_elements_by_tag_name_ns(root->node, list->namespace, list->name, &native);
@@ -650,11 +652,13 @@ int qjs_dom_install_collections(JSContext *ctx, JSValue *prototypes)
         int type = parents[i].type;
         const JSCFunctionListEntry queries[] = {
             {"getElementsByTagName", JS_PROP_C_W_E, JS_DEF_CFUNC, type,
-                {.func = {1, JS_CFUNC_generic_magic, {.generic_magic = elements_by_tag}}}},
+                {.func = {1, JS_CFUNC_generic_magic, {.generic_magic = elements_query}}}},
+            {"getElementsByClassName", JS_PROP_C_W_E, JS_DEF_CFUNC, type | QUERY_CLASS,
+                {.func = {1, JS_CFUNC_generic_magic, {.generic_magic = elements_query}}}},
             {"getElementsByTagNameNS", JS_PROP_C_W_E, JS_DEF_CFUNC, type | QUERY_NAMESPACE,
-                {.func = {2, JS_CFUNC_generic_magic, {.generic_magic = elements_by_tag}}}},
+                {.func = {2, JS_CFUNC_generic_magic, {.generic_magic = elements_query}}}},
         };
-        if (qjs_define_properties(ctx, prototypes[parents[i].prototype], queries, 2) < 0)
+        if (qjs_define_properties(ctx, prototypes[parents[i].prototype], queries, 3) < 0)
             goto out;
     }
     ret = 0;

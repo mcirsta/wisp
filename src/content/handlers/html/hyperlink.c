@@ -25,16 +25,28 @@ nserror html_link_url(const dom_string *value, nsurl *base, nsurl **result)
     if (text == NULL)
         return NSERROR_NOMEM;
     /* Keep URL normalization shared with box construction and image maps. */
-    while (start < end && ascii_is_space(rel[start]))
+    while (start < end && (unsigned char)rel[start] <= 0x20)
         start++;
-    while (end > start && ascii_is_space(rel[end - 1]))
+    while (end > start && (unsigned char)rel[end - 1] <= 0x20)
         end--;
     for (size_t i = start; i < end; i++) {
-        if ((unsigned char)rel[i] < 0x20)
+        /* URL preprocessing removes only ASCII tabs and newlines within a
+         * URL. Other C0 controls must be escaped, not silently discarded. */
+        if (rel[i] == '\t' || rel[i] == '\n' || rel[i] == '\r')
             continue;
-        if (rel[i] == ' ') {
-            memcpy(text + used, "%20", 3);
+        unsigned char c = (unsigned char)rel[i];
+        if (c <= 0x20 || c == 0x7f) {
+            static const char hex[] = "0123456789ABCDEF";
+            text[used++] = '%';
+            text[used++] = hex[c >> 4];
+            text[used++] = hex[c & 15];
+        } else if (i + 2 < end && c == 0xed && ((unsigned char)rel[i + 1] & 0xe0) == 0xa0 &&
+            ((unsigned char)rel[i + 2] & 0xc0) == 0x80) {
+            /* Native DOMString attributes may still contain isolated UTF-16
+             * surrogates from setAttribute; URL input is a scalar value string. */
+            memcpy(text + used, "\xef\xbf\xbd", 3);
             used += 3;
+            i += 2;
         } else {
             text[used++] = rel[i];
         }

@@ -744,6 +744,18 @@ dom_exception _dom_node_get_owner_document(dom_node_internal *node, struct dom_d
     return DOM_NO_ERR;
 }
 
+/* Pre-insertion validation has already succeeded. Prepare/adopt before any
+ * destination removals; libdom adoption preserves identity and pending owners. */
+static dom_exception adopt_for_insertion(dom_node_internal *parent, dom_node_internal *child)
+{
+    if (child->owner == parent->owner)
+        return DOM_NO_ERR;
+    dom_node *adopted = NULL;
+    dom_exception err = dom_document_adopt_node(parent->owner, child, &adopted);
+    dom_node_unref(adopted);
+    return err;
+}
+
 /**
  * Insert a child into a node
  *
@@ -759,8 +771,6 @@ dom_exception _dom_node_get_owner_document(dom_node_internal *node, struct dom_d
  *                                         ::node is of type Document and a
  *                                         second DocumentType or Element is
  *                                         being inserted,
- *         DOM_WRONG_DOCUMENT_ERR          if ::new_child was created from a
- *                                         different document than ::node,
  *         DOM_NO_MODIFICATION_ALLOWED_ERR if ::node is readonly, or
  *                                         ::new_child's parent is readonly,
  *         DOM_NOT_FOUND_ERR               if ::ref_child is not a child of
@@ -792,6 +802,10 @@ dom_exception _dom_node_insert_before(
         return DOM_NO_ERR;
     }
 
+    err = adopt_for_insertion(node, new_child);
+    if (err != DOM_NO_ERR)
+        return err;
+
     /* Validation has already checked the old parent's writability. */
     if (new_child->parent != NULL)
         _dom_node_detach(new_child);
@@ -811,8 +825,6 @@ dom_exception _dom_node_insert_before(
         }
     } else {
         dom_node_remove_pending(new_child);
-        if (new_child->owner == NULL && new_child->type == DOM_DOCUMENT_TYPE_NODE)
-            new_child->owner = (struct dom_document *)node;
         err = _dom_node_attach(new_child, node, ref_child == NULL ? node->last_child : ref_child->previous,
             ref_child == NULL ? NULL : ref_child);
         if (err != DOM_NO_ERR)
@@ -841,8 +853,6 @@ dom_exception _dom_node_insert_before(
  *                                         ::node is of type Document and a
  *                                         second DocumentType or Element is
  *                                         being inserted,
- *         DOM_WRONG_DOCUMENT_ERR          if ::new_child was created from a
- *                                         different document than ::node,
  *         DOM_NO_MODIFICATION_ALLOWED_ERR if ::node is readonly, or
  *                                         ::new_child's parent is readonly,
  *         DOM_NOT_FOUND_ERR               if ::old_child is not a child of
@@ -872,13 +882,14 @@ dom_exception _dom_node_replace_child(
         return DOM_NO_ERR;
     }
 
+    err = adopt_for_insertion(node, new_child);
+    if (err != DOM_NO_ERR)
+        return err;
     if (new_child->parent != NULL)
         _dom_node_detach(new_child);
 
     if (new_child->type != DOM_DOCUMENT_FRAGMENT_NODE)
         dom_node_remove_pending(new_child);
-    if (new_child->owner == NULL && new_child->type == DOM_DOCUMENT_TYPE_NODE)
-        new_child->owner = (struct dom_document *)node;
 
     /* Perform the replacement */
     err = _dom_node_replace(old_child, new_child);
@@ -954,8 +965,6 @@ dom_exception _dom_node_remove_child(dom_node_internal *node, dom_node_internal 
  *                                         ::node is of type Document and a
  *                                         second DocumentType or Element is
  *                                         being inserted,
- *         DOM_WRONG_DOCUMENT_ERR          if ::new_child was created from a
- *                                         different document than ::node,
  *         DOM_NO_MODIFICATION_ALLOWED_ERR if ::node is readonly, or
  *                                         ::new_child's parent is readonly.
  *
@@ -993,7 +1002,6 @@ dom_exception _dom_node_has_child_nodes(dom_node_internal *node, bool *result)
  * \param deep    True to deep-clone the node's sub-tree
  * \param result  Pointer to location to receive result
  * \return DOM_NO_ERR        on success,
- *         DOM_NO_MODIFICATION_ALLOWED_ERR if ::node's owner is readonly, or
  *         DOM_NO_MEMORY_ERR on memory exhaustion.
  *
  * The returned node will already be referenced.
@@ -1023,8 +1031,7 @@ dom_exception _dom_node_has_child_nodes(dom_node_internal *node, bool *result)
  * the children of an EntityReference clone are readonly. In addition, clones
  * of unspecified Attr nodes are specified.
  *
- * \todo work out what happens when cloning Document, DocumentType, Entity
- * and Notation nodes.
+ * Documents clone their modeled metadata and create an independent owner.
  *
  * Note: we adopt a OO paradigm, this clone_node just provide a basic operation
  * of clone. Special clones like Attr/EntitiReference stated above should
@@ -1043,8 +1050,6 @@ dom_exception _dom_node_clone_for_document(
     dom_node_internal *copy = NULL;
     dom_exception err;
     *result = NULL;
-    if (_dom_node_readonly_owner(node) || (doc != NULL && _dom_node_readonly_owner(&doc->base)))
-        return DOM_NO_MODIFICATION_ALLOWED_ERR;
     if (doc != node->owner && doc != NULL && node->owner != NULL && node->owner->memoised != NULL) {
         err = _dom_document_ensure_html_strings(doc);
         if (err != DOM_NO_ERR)
@@ -1053,7 +1058,8 @@ dom_exception _dom_node_clone_for_document(
     err = dom_node_copy(node, &copy);
     if (err != DOM_NO_ERR)
         return err;
-    if (copy->owner != doc)
+    /* Documents own themselves internally; their descendants use the copy. */
+    if (node->type != DOM_DOCUMENT_NODE && copy->owner != doc)
         _dom_node_set_document(copy, doc);
     if (node->type == DOM_ELEMENT_NODE) {
         err = _dom_element_copy_attributes((dom_element *)node, (dom_element *)copy, operation);
@@ -1506,6 +1512,8 @@ dom_exception dom_node_replace_all(dom_node *parent, dom_node *replacement)
     dom_exception err = DOM_NO_ERR;
     if (replacement != NULL) {
         err = _dom_node_check_insertion(node, (dom_node_internal *)replacement, NULL, NULL);
+        if (err == DOM_NO_ERR)
+            err = adopt_for_insertion(node, (dom_node_internal *)replacement);
         if (err != DOM_NO_ERR)
             return err;
     }
@@ -2034,11 +2042,8 @@ static dom_exception _dom_node_check_insertion(const dom_node_internal *parent, 
                 return DOM_HIERARCHY_REQUEST_ERR;
         }
     }
-    /* Cross-document adoption is a separate native API; no foreign wrappers
-     * are currently exposed by the browser's JavaScript bindings. */
-    if (child->owner != parent->owner && !(child->type == DOM_DOCUMENT_TYPE_NODE && child->owner == NULL))
-        return DOM_WRONG_DOCUMENT_ERR;
-    if (_dom_node_readonly(parent) || (child->parent != NULL && _dom_node_readonly(child->parent)))
+    if (_dom_node_readonly(parent) || _dom_node_readonly_owner(child) ||
+        (child->parent != NULL && _dom_node_readonly(child->parent)))
         return DOM_NO_MODIFICATION_ALLOWED_ERR;
     return DOM_NO_ERR;
 }

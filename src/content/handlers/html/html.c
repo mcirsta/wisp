@@ -53,6 +53,7 @@
 #include "utils/talloc.h"
 #include "content/content_factory.h"
 #include "content/handlers/javascript/js.h"
+#include "content/handlers/html/view_events.h"
 #include "content/textsearch.h"
 #include "content/handlers/html/content_visibility.h"
 #include "content/handlers/html/search.h"
@@ -86,6 +87,7 @@
 static void html_restyle(void *pw);
 static void html_schedule_restyle(html_content *html);
 static void html_restyle_free_old(html_content *html);
+static nserror html_discard_provisional_layout(html_content *html);
 
 #define CHUNK 4096
 
@@ -315,6 +317,7 @@ static void html_box_convert_done(html_content *c, bool success)
 static bool html_load_ready(const html_content *html)
 {
     if (html->base.status != CONTENT_STATUS_READY || html->aborted || html->restyle_pending || html->restyling ||
+        html->pending_reformat ||
         html->base.active != 0 || html->scripts_running || browser_window_children_loading(html->bw))
         return false;
     for (unsigned i = 0; i < html->scripts_count; i++) {
@@ -419,46 +422,6 @@ static void html_lifecycle_task(void *pw)
 }
 
 
-static void html_get_dimensions(html_content *htmlc)
-{
-    css_fixed device_dpi = nscss_screen_dpi;
-    unsigned f_size;
-    unsigned f_min;
-    unsigned w;
-    unsigned h;
-    union content_msg_data msg_data = {
-        .getdims =
-            {
-                .viewport_width = &w,
-                .viewport_height = &h,
-            },
-    };
-
-    content_broadcast(&htmlc->base, CONTENT_MSG_GETDIMS, &msg_data);
-
-
-    w = css_unit_device2css_px(INTTOFIX(w), device_dpi);
-    h = css_unit_device2css_px(INTTOFIX(h), device_dpi);
-
-    htmlc->media.width = w;
-    htmlc->media.height = h;
-    htmlc->unit_len_ctx.viewport_width = w;
-    htmlc->unit_len_ctx.viewport_height = h;
-    htmlc->unit_len_ctx.container_width = w;
-    htmlc->unit_len_ctx.container_height = h;
-    htmlc->unit_len_ctx.device_dpi = device_dpi;
-
-    NSLOG(wisp, DEEPDEBUG, "DIAG: html_get_dimensions: media.width=%u media.height=%u (CSS px)", FIXTOINT(w),
-        FIXTOINT(h));
-
-    /** \todo Change nsoption font sizes to px. */
-    f_size = FDIV(FMUL(F_96, FDIV(INTTOFIX(nsoption_int(font_size)), F_10)), F_72);
-    f_min = FDIV(FMUL(F_96, FDIV(INTTOFIX(nsoption_int(font_min_size)), F_10)), F_72);
-
-    htmlc->unit_len_ctx.font_size_default = f_size;
-    htmlc->unit_len_ctx.font_size_minimum = f_min;
-}
-
 /* exported function documented in html/html_internal.h */
 void html_finish_conversion(html_content *htmlc)
 {
@@ -475,21 +438,15 @@ void html_finish_conversion(html_content *htmlc)
         return;
     }
 
-    /* If we already have a selection context, then we have already
-     * "finished" conversion.  We can get here twice if e.g. some JS
-     * adds a new stylesheet, and the stylesheet gets added after
-     * the HTML content is initially finished.
-     *
-     * If we didn't do this, the HTML content would try to rebuild the
-     * box tree for the html content when this new stylesheet is ready.
-     * NetSurf has no concept of dynamically changing documents, so this
-     * would break badly.
-     *
-     * EXCEPTION: If we have a pending font_wait_start_ms, we're resuming
-     * after waiting for fonts, so we should proceed.
-     */
+    if (htmlc->layout_provisional && html_discard_provisional_layout(htmlc) != NSERROR_OK) {
+        content_set_error(&htmlc->base);
+        return;
+    }
+
+    /* An existing context belongs to an initial conversion already started.
+     * Font completion resumes that conversion; later DOM changes use restyle. */
     if (htmlc->select_ctx != NULL && htmlc->font_wait_start_ms == 0) {
-        NSLOG(wisp, INFO, "Ignoring style change: NS layout is static.");
+        NSLOG(wisp, INFO, "Initial conversion already started.");
         return;
     }
 
@@ -706,6 +663,7 @@ static nserror html_create_html_data(html_content *c, const http_parameter *para
     c->universal = NULL;
     c->num_objects = 0;
     c->object_list = NULL;
+    c->images_active = 0;
     c->forms = NULL;
     c->imagemaps = NULL;
     c->svg_symbols = NULL;
@@ -1066,8 +1024,8 @@ bool html_can_begin_conversion(html_content *htmlc)
     if (!htmlc->parse_completed)
         return true;
 
-    if (htmlc->base.active != htmlc->scripts_active)
-        return false; /* Still waiting for CSS or HTML fetch */
+    if (htmlc->base.active != htmlc->scripts_active + htmlc->images_active)
+        return false; /* Images do not block initial box construction. */
 
     for (i = 0; i != htmlc->stylesheet_count; i++) {
         /* Cannot begin conversion if the stylesheets are modified */
@@ -1219,6 +1177,12 @@ bool html_begin_conversion(html_content *htmlc)
         return true;
     }
 
+    /* A parser-time CSSOM read owns real boxes and resource bindings. Retire
+     * them before the finished document creates its ordinary presentation. */
+    if (htmlc->layout_provisional && html_discard_provisional_layout(htmlc) != NSERROR_OK) {
+        dom_node_unref(html);
+        return false;
+    }
     /* Clear any existing layout */
     html_free_layout(htmlc);
 
@@ -1239,7 +1203,7 @@ bool html_begin_conversion(html_content *htmlc)
     /* Proceed with conversion if only scripts remain active or no fetches remain.
      * This allows immediate first render without waiting for script downloads.
      */
-    if (htmlc->base.active == htmlc->scripts_active) {
+    if (htmlc->base.active == htmlc->scripts_active + htmlc->images_active) {
         PERF("html_begin_conversion: calling html_finish_conversion (active=%d, scripts_active=%d)", htmlc->base.active,
             htmlc->scripts_active);
         html_finish_conversion(htmlc);
@@ -1259,6 +1223,8 @@ bool html_begin_conversion(html_content *htmlc)
 static void html_stop(struct content *c)
 {
     html_content *htmlc = (html_content *)c;
+
+    html_view_events_cancel(htmlc);
 
     guit->misc->schedule(-1, html_lifecycle_task, htmlc);
     htmlc->lifecycle_pending = false;
@@ -1317,10 +1283,15 @@ static bool html_layout(struct content *c, int width, int height)
     uint64_t ms_after;
     uint64_t ms_interval;
 
+    /* All initial and later layout paths establish the same viewport baseline.
+     * The notification is queued; layout never invokes script here. */
+    html_check_viewport_resize(htmlc);
+
     /* A missing layout can mean either a conversion in progress or a completed
      * empty document. Only the latter publishes empty extents. */
     if (htmlc->layout == NULL) {
-        if (htmlc->box_conversion_context == NULL && c->status != CONTENT_STATUS_LOADING) {
+        if (htmlc->box_conversion_context == NULL &&
+            (c->status != CONTENT_STATUS_LOADING || htmlc->layout_syncing)) {
             c->width = c->height = 0;
             htmlc->had_initial_layout = true;
             selection_reinit(htmlc->sel);
@@ -1338,7 +1309,7 @@ static bool html_layout(struct content *c, int width, int height)
      * This prevents unnecessary intermediate reformats that block download
      * completion processing and slow down overall page load.
      */
-    if (!htmlc->restyling && htmlc->had_initial_layout && c->active > htmlc->scripts_active) {
+    if (!htmlc->layout_syncing && !htmlc->restyling && htmlc->had_initial_layout && c->active > htmlc->scripts_active) {
         PERF("html_reformat SKIPPED: %d objects still downloading", c->active - htmlc->scripts_active);
         return true;
     }
@@ -1597,11 +1568,11 @@ static void html_restyle_finish(html_content *html, bool success, bool retained)
             html->restyle_profile.layout_cpu_ns = cpu_end - layout_cpu_start);
     html->restyling = false;
     html_restyle_end(html, success);
-    if (success)
+    if (success && !html->layout_provisional)
         html->base.locked = false;
-    else
+    else if (!success)
         content_set_error(&html->base);
-    if (html->bw != NULL) {
+    if (html->bw != NULL && !html->layout_provisional) {
         nserror err = browser_window_rebind_iframes(html->bw, success);
         if (err != NSERROR_OK)
             NSLOG(wisp, WARNING, "Unable to update iframe windows after restyle: %d", err);
@@ -1615,6 +1586,10 @@ static void html_restyle_finish(html_content *html, bool success, bool retained)
         content_broadcast_error(&html->base, NSERROR_NOMEM, NULL);
         return;
     }
+    /* This tree is available to script, but parsing still owns the content.
+     * Publishing extents/iframes or unlocking it here would end initial load. */
+    if (html->layout_provisional)
+        return;
     /* Existing DOM, stylesheet context, history and load status are unchanged.
      * A REFORMAT updates extents without a navigation or scroll reset. */
     union content_msg_data data = {.background = false};
@@ -1745,7 +1720,8 @@ static void html_restyle(void *pw)
 {
     html_content *html = pw;
 
-    if (!html->restyle_pending || html->restyling || !html->had_initial_layout || html->box_conversion_context != NULL)
+    if (!html->restyle_pending || html->restyling || (!html->had_initial_layout && !html->layout_syncing) ||
+        html->box_conversion_context != NULL)
         return;
     HTML_PROFILE(html->restyle_profile = (struct html_restyle_profile){.start_ns = html_profile_now()});
     html_restyle_begin(html);
@@ -1834,7 +1810,7 @@ void html_restyle_restart(html_content *html)
 static void html_schedule_restyle(html_content *html)
 {
     html->restyle_pending = true;
-    if (!html->restyling)
+    if (!html->restyling && !html->layout_provisional)
         guit->misc->schedule(0, html_restyle, html);
 }
 
@@ -1850,6 +1826,98 @@ void html_request_checked_restyle(html_content *html, dom_node *node)
     html_schedule_restyle(html);
 }
 
+static nserror html_discard_provisional_layout(html_content *html)
+{
+    uint32_t count;
+    nserror err = nscss_invalidate_subtree((dom_node *)html->document, &count);
+    if (err == NSERROR_OK)
+        err = libdom_iterate_elements((dom_node *)html->document, html_restyle_detach_element, NULL);
+    if (err != NSERROR_OK)
+        return err;
+    for (struct content_html_object *o = html->object_list; o != NULL; o = o->next)
+        o->box = NULL;
+    if (html->iframe != NULL)
+        html_destroy_iframe(html->iframe);
+    if (html->frameset != NULL)
+        html_destroy_frameset(html->frameset);
+    html->iframe = NULL;
+    html->frameset = NULL;
+    guit->misc->schedule(-1, html_deferred_reformat, html);
+    guit->misc->schedule(-1, html_restyle, html);
+    html->pending_reformat = html->restyle_pending = false;
+    html_free_layout(html);
+    html->unit_len_ctx.root_style = NULL;
+    html->had_initial_layout = html->layout_provisional = html->layout_styles_dirty = false;
+    /* The next READY notification must lay out its newly built tree even at
+     * the same viewport size as the parser-time measurement. */
+    html->base.available_width = html->base.available_height = -1;
+    return NSERROR_OK;
+}
+
+nserror html_update_layout(html_content *html)
+{
+    if (html->layout_syncing || html->reflowing || html->aborted || html->base.status == CONTENT_STATUS_ERROR)
+        return NSERROR_INVALID;
+
+    html->layout_syncing = true;
+    bool was_locked = html->base.locked;
+    nserror err = NSERROR_OK;
+    /* A pending normal conversion is already past parsing. Drain its work,
+     * not the event loop. Lifecycle notifications remain scheduled tasks. */
+    dom_to_box_finish(html);
+    if (html->base.status == CONTENT_STATUS_ERROR) {
+        err = NSERROR_NOMEM;
+        goto out;
+    }
+    if (!html->had_initial_layout && html->base.status == CONTENT_STATUS_LOADING)
+        html->layout_provisional = true;
+
+    css_fixed old_width = html->media.width, old_height = html->media.height;
+    html_get_dimensions(html);
+    html->base.available_width = FIXTOINT(css_unit_css2device_px(html->media.width, html->unit_len_ctx.device_dpi));
+    html->base.available_height = FIXTOINT(css_unit_css2device_px(html->media.height, html->unit_len_ctx.device_dpi));
+    bool resized = old_width != html->media.width || old_height != html->media.height;
+
+    if (html->select_ctx == NULL || html->layout_styles_dirty) {
+        css_select_ctx *replacement = NULL;
+        err = html_css_new_selection_context(html, &replacement);
+        if (err != NSERROR_OK)
+            goto out;
+        if (html->select_ctx != NULL)
+            css_select_ctx_destroy(html->select_ctx);
+        html->select_ctx = replacement;
+        html->layout_styles_dirty = false;
+        html->restyle_pending = true;
+    }
+    if (!html->had_initial_layout || resized)
+        html->restyle_pending = true;
+    if (html->restyle_pending) {
+        guit->misc->schedule(-1, html_restyle, html);
+        html_restyle(html);
+        dom_to_box_finish(html);
+    } else if (html->pending_reformat) {
+        guit->misc->schedule(-1, html_deferred_reformat, html);
+        if (html->layout_provisional) {
+            html->pending_reformat = false;
+            if (!html_layout(&html->base, html->base.available_width, html->base.available_height))
+                err = NSERROR_NOMEM;
+        } else {
+            /* Consuming the queued reformat must still publish new extents
+             * and recheck completion. This runs only that callback's work. */
+            html_deferred_reformat(html);
+        }
+    }
+    if (html->base.status == CONTENT_STATUS_ERROR)
+        err = NSERROR_NOMEM;
+out:
+    /* During data delivery the parser is unlocked; after data_complete it is
+     * locked for conversion. A provisional read must preserve either state. */
+    if (html->layout_provisional && html->base.status != CONTENT_STATUS_ERROR)
+        html->base.locked = was_locked;
+    html->layout_syncing = false;
+    return err;
+}
+
 
 /**
  * Destroy a CONTENT_HTML and free all resources it owns.
@@ -1859,6 +1927,8 @@ static void html_destroy(struct content *c)
 {
     html_content *html = (html_content *)c;
     struct form *f, *g;
+
+    html_view_events_cancel(html);
 
     NSLOG(wisp, INFO, "content %p", c);
 
@@ -2039,6 +2109,7 @@ static nserror html_close(struct content *c)
     nserror ret = NSERROR_OK;
 
     htmlc->input_generation++;
+    html_view_events_cancel(htmlc);
     selection_clear(htmlc->sel, false);
 
     guit->misc->schedule(-1, script_resume_conversion_cb, htmlc);

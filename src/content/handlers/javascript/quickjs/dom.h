@@ -18,6 +18,7 @@ enum qjs_dom_prototype {
     QJS_DOCUMENT_TYPE,
     QJS_DOCUMENT_FRAGMENT,
     QJS_SVG_ELEMENT,
+    QJS_HTML_IMAGE_ELEMENT,
     QJS_DOM_PROTOTYPES
 };
 
@@ -30,7 +31,7 @@ struct qjs_dom_node {
     JSValue class_list;
     JSValue style;
     JSValue child_lists[2]; /* SameObject childNodes and children, allocated lazily. */
-    JSValue owner; /* Document wrapper; undefined on the document itself. */
+    JSValue owner; /* Realm root wrapper, not native ownerDocument; undefined on the root. */
     struct qjs_dom_document *document;
     struct qjs_dom_node *next, **previous;
 };
@@ -38,11 +39,14 @@ struct qjs_dom_node {
 /* Brand-check and connect the document lazily (the parser creates the context
  * before publishing its document pointer). type == 0 accepts every Node. */
 struct qjs_dom_node *qjs_dom_get(JSContext *ctx, JSValueConst object, dom_node_type type);
+/* Retain the realm root for wrapping nodes from any of its native documents. */
 JSValue qjs_dom_owner(JSContext *ctx, JSValueConst object, struct qjs_dom_node *node);
 JSValue qjs_dom_wrap(JSContext *ctx, JSValueConst document, dom_node *node);
 JSValue qjs_dom_exception(JSContext *ctx, dom_exception error);
 dom_string *qjs_dom_string(JSContext *ctx, JSValueConst value, bool nullable);
+dom_string *qjs_dom_usv_string(JSContext *ctx, JSValueConst value);
 JSValue qjs_dom_from_string(JSContext *ctx, dom_string *value, bool nullable);
+bool qjs_dom_is_active_document(JSContext *ctx, dom_node *node);
 bool qjs_dom_is_html(dom_node *node);
 bool qjs_dom_is_svg(dom_node *node);
 void qjs_dom_changed(
@@ -60,6 +64,10 @@ int qjs_init_tokenlist(JSContext *ctx);
 int qjs_dom_install_style(JSContext *ctx, JSValue *prototypes);
 JSValue qjs_class_list_get(JSContext *ctx, JSValueConst object);
 JSValue qjs_class_list_set(JSContext *ctx, JSValueConst object, JSValueConst value);
+int qjs_dom_install_images(JSContext *ctx, JSValue *prototypes);
+int qjs_dom_install_geometry(JSContext *ctx, JSValue *prototypes);
+int qjs_init_rect(JSContext *ctx);
+JSValue qjs_rect_new(JSContext *ctx, double x, double y, double width, double height);
 int qjs_dom_install_properties(JSContext *ctx, JSValue *prototypes);
 int qjs_dom_install_tree(JSContext *ctx, JSValue *prototypes);
 int qjs_dom_install_markup(JSContext *ctx, JSValue *prototypes);

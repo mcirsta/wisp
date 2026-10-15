@@ -409,6 +409,14 @@ css__compute_absolute_values(const css_computed_style *parent, css_computed_styl
     css_fixed size_ref_value = 0;
     css_error error;
 
+    /* CSS Overflow: visible computes to auto when the other axis scrolls or
+     * clips. Resolve this after inheritance, for every consumer of the style. */
+    uint8_t overflow_x = get_overflow_x(style), overflow_y = get_overflow_y(style);
+    if (overflow_x == CSS_OVERFLOW_VISIBLE && overflow_y > CSS_OVERFLOW_VISIBLE)
+        set_overflow_x(style, CSS_OVERFLOW_AUTO);
+    if (overflow_y == CSS_OVERFLOW_VISIBLE && overflow_x > CSS_OVERFLOW_VISIBLE)
+        set_overflow_y(style, CSS_OVERFLOW_AUTO);
+
     /* Get reference font-size for relative sizes. */
     if (parent != NULL) {
         psize.status = get_font_size(parent, &length, &psize.data.length.unit);

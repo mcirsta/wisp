@@ -30,6 +30,8 @@ extern "C" {
 #include "wisp/plot_style.h"
 #include "content/handlers/css/dump.h"
 #include "content/handlers/html/font.h"
+#include "content/handlers/html/image.h"
+#include "wisp/utils/nsurl.h"
 #include "desktop/scrollbar.h"
 #include "content/textsearch.h"
 #include "utils/talloc.h"
@@ -406,6 +408,14 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
             const QString hidden = attribute(reinterpret_cast<dom_node *>(element), "hidden");
             state["hidden"] = hidden.isNull() ? QJsonValue(QJsonValue::Null) : QJsonValue(hidden);
             const QString tag = domName(reinterpret_cast<dom_node *>(element));
+            if (tag == "img") {
+                html_image_state image;
+                html_image_get_state(html, reinterpret_cast<dom_node *>(element), &image);
+                state["complete"] = image.complete;
+                state["current_src"] = image.current_src ? QString::fromUtf8(nsurl_access(image.current_src)) : QString();
+                state["natural_width"] = int(image.natural_width);
+                state["natural_height"] = int(image.natural_height);
+            }
             if (tag == "details")
                 state["open"] = !attribute(reinterpret_cast<dom_node *>(element), "open").isNull();
             if (tag == "input") {

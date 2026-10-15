@@ -94,6 +94,8 @@ dom_exception _dom_document_template_owner(dom_document *doc, dom_document **own
 /* Initialise the document */
 dom_exception _dom_document_initialise(dom_document *doc, dom_events_default_action_fetcher daf, void *daf_ctx);
 
+void _dom_document_copy_metadata(dom_document *source, dom_document *copy);
+
 /* Finalise the document */
 bool _dom_document_finalise(dom_document *doc);
 

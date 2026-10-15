@@ -356,6 +356,7 @@ add_wisp_test(test_quickjs
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/location.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/document.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/dom.c
+  ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/image.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/tree.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/markup.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/tokenlist.c
@@ -373,6 +374,8 @@ add_wisp_test(test_quickjs
   ${CMAKE_SOURCE_DIR}/src/test/test_quickjs.c
 )
 add_dependencies(test_quickjs quickjs_bindings)
+target_compile_definitions(test_quickjs PRIVATE
+  WISP_TEST_LAZY_LOADER="${CMAKE_SOURCE_DIR}/test/js-lazy-images/vendor/lazysizes-4.0.3.min.js")
 target_include_directories(test_quickjs PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/quickjs-ng
   ${CMAKE_SOURCE_DIR}/contrib/libnsutils/include
@@ -434,6 +437,11 @@ add_executable(layout_fixed_test layout_fixed_test.c)
 target_include_directories(layout_fixed_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(layout_fixed_test wisp ${CHECK_LIBRARIES})
 add_test(NAME layout_fixed_test COMMAND layout_fixed_test)
+
+add_executable(box_geometry_test box_geometry_test.c)
+target_include_directories(box_geometry_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(box_geometry_test wisp ${CHECK_LIBRARIES})
+add_test(NAME box_geometry_test COMMAND box_geometry_test)
 
 add_executable(layout_sticky_test layout_sticky_test.c sticky_test_style.c)
 set_source_files_properties(sticky_test_style.c PROPERTIES INCLUDE_DIRECTORIES
@@ -526,6 +534,11 @@ target_include_directories(dom_adopt_test PRIVATE ${TEST_COMMON_INCLUDES})
 target_link_libraries(dom_adopt_test dom ${CHECK_LIBRARIES})
 add_test(NAME dom_adopt_test COMMAND dom_adopt_test)
 
+add_executable(dom_clone_test dom_clone_test.c)
+target_include_directories(dom_clone_test PRIVATE ${TEST_COMMON_INCLUDES})
+target_link_libraries(dom_clone_test dom ${CHECK_LIBRARIES})
+add_test(NAME dom_clone_test COMMAND dom_clone_test)
+
 add_executable(dom_template_test dom_template_test.c)
 target_include_directories(dom_template_test PRIVATE ${TEST_COMMON_INCLUDES})
 target_link_libraries(dom_template_test dom ${CHECK_LIBRARIES})
@@ -569,6 +582,8 @@ if(NOT WIN32)
     target_compile_definitions(dom_html_serialize_test PRIVATE WISP_TEST_ALLOC_FAILURE)
     target_link_libraries(dom_template_test malloc_fig)
     target_compile_definitions(dom_template_test PRIVATE WISP_TEST_ALLOC_FAILURE)
+    target_link_libraries(dom_clone_test malloc_fig)
+    target_compile_definitions(dom_clone_test PRIVATE WISP_TEST_ALLOC_FAILURE)
     target_link_libraries(dom_adopt_test malloc_fig)
     target_compile_definitions(dom_adopt_test PRIVATE WISP_TEST_ALLOC_FAILURE)
     target_link_libraries(dom_userdata_test malloc_fig)
@@ -665,3 +680,8 @@ if(TARGET malloc_fig AND CMAKE_BUILD_TYPE STREQUAL "Release")
   target_compile_definitions(form_bindings_test PRIVATE WISP_TEST_ALLOC_FAILURE)
 endif()
 add_test(NAME restyle_tracking_test COMMAND restyle_tracking_test)
+
+add_executable(image_source_test image_source_test.c)
+target_include_directories(image_source_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(image_source_test wisp ${CHECK_LIBRARIES})
+add_test(NAME image_source_test COMMAND image_source_test)

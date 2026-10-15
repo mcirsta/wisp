@@ -681,8 +681,7 @@ dom_exception _dom_document_get_elements_by_tag_name(dom_document *doc, dom_stri
  * \param result  Pointer to location to receive imported node in this document.
  * \return DOM_NO_ERR                on success,
  *         DOM_INVALID_CHARACTER_ERR if any of the names are invalid,
- *         DOM_NOT_SUPPORTED_ERR     if the type of \p node is unsupported,
- *         DOM_NO_MODIFICATION_ALLOWED_ERR if \p node or \p doc is readonly
+ *         DOM_NOT_SUPPORTED_ERR     if the type of \p node is unsupported
  *
  * The returned node will have its reference count increased. It is
  * the responsibility of the caller to unref the node once it has
@@ -1231,10 +1230,29 @@ void _dom_document_destroy(dom_node_internal *node)
 /* The copy constructor function of this class */
 dom_exception _dom_document_copy(dom_node_internal *old, dom_node_internal **copy)
 {
-    UNUSED(old);
-    UNUSED(copy);
+    dom_document *doc = NULL;
+    *copy = NULL;
+    dom_exception err = _dom_document_create(NULL, NULL, &doc);
+    if (err != DOM_NO_ERR)
+        return err;
+    _dom_document_copy_metadata((dom_document *)old, doc);
+    *copy = &doc->base;
+    return DOM_NO_ERR;
+}
 
-    return DOM_NOT_SUPPORTED_ERR;
+/* Only document properties are cloned: event/default-action hosts, live lists,
+ * pending nodes and template owners belong to the new document independently. */
+void _dom_document_copy_metadata(dom_document *source, dom_document *copy)
+{
+    dom_string_unref(copy->uri);
+    copy->uri = dom_string_ref(source->uri);
+    copy->quirks = source->quirks;
+    copy->html = source->html;
+}
+
+bool dom_document_is_html(dom_document *doc)
+{
+    return doc->html;
 }
 
 

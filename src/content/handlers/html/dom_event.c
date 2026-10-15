@@ -44,6 +44,7 @@
 #include "content/handlers/html/dom_event.h"
 #include "content/handlers/html/hyperlink.h"
 #include "content/handlers/html/object.h"
+#include "content/handlers/html/image.h"
 
 
 /**
@@ -140,34 +141,7 @@ static bool html_process_inserted_base(html_content *htmlc, dom_node *node)
  */
 static bool html_process_inserted_img(html_content *htmlc, dom_node *node)
 {
-    dom_string *src;
-    nsurl *url;
-    nserror err;
-    dom_exception exc;
-    bool success;
-
-    /* Do nothing if foreground images are disabled */
-    if (nsoption_bool(foreground_images) == false) {
-        return true;
-    }
-
-    exc = dom_element_get_attribute(node, corestring_dom_src, &src);
-    if (exc != DOM_NO_ERR || src == NULL) {
-        return true;
-    }
-
-    err = nsurl_join(htmlc->base_url, dom_string_data(src), &url);
-    if (err != NSERROR_OK) {
-        dom_string_unref(src);
-        return false;
-    }
-    dom_string_unref(src);
-
-    /* Speculatively fetch the image */
-    success = html_fetch_object(htmlc, url, NULL, CONTENT_IMAGE, false);
-    nsurl_unref(url);
-
-    return success;
+    return html_image_schedule(htmlc, node, false) == NSERROR_OK;
 }
 
 
@@ -716,6 +690,13 @@ static void dom_default_action_DOMSubtreeModified_cb(struct dom_event *evt, void
 
     exc = dom_event_get_target(evt, &node);
     if ((exc == DOM_NO_ERR) && (node != NULL)) {
+        /* Parser edits after a CSSOM read invalidate its provisional tree too.
+         * Rebuild only when script asks again or normal parsing finishes. */
+        if (htmlc->layout_provisional && !htmlc->restyling) {
+            bool connected = false;
+            if (dom_node_contains(htmlc->document, node, &connected) != DOM_NO_ERR || connected)
+                html_request_restyle(htmlc);
+        }
         if (htmlc->title == (dom_node *)node) {
             /* Node is our title node */
             html_process_title(htmlc, (dom_node *)node);

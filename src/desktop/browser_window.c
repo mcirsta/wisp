@@ -1574,10 +1574,21 @@ static nserror browser_window_callback(hlcache_handle *c, const hlcache_event *e
     } break;
 
     case CONTENT_MSG_GETDIMS: {
-        int width;
-        int height;
+        int width = 0;
+        int height = 0;
 
-        browser_window_get_dimensions(bw, &width, &height);
+        if (event->data.getdims.include_scrollbars && bw->window != NULL &&
+            guit->window->get_viewport_dimensions != NULL) {
+            guit->window->get_viewport_dimensions(bw->window, &width, &height);
+        } else {
+            browser_window_get_dimensions(bw, &width, &height);
+            if (!event->data.getdims.include_scrollbars && bw->window == NULL) {
+                if (bw->scroll_y != NULL)
+                    width = width > SCROLLBAR_WIDTH ? width - SCROLLBAR_WIDTH : 0;
+                if (bw->scroll_x != NULL)
+                    height = height > SCROLLBAR_WIDTH ? height - SCROLLBAR_WIDTH : 0;
+            }
+        }
 
         *(event->data.getdims.viewport_width) = width / bw->scale;
         *(event->data.getdims.viewport_height) = height / bw->scale;
@@ -3780,6 +3791,12 @@ void browser_window_get_scroll(struct browser_window *bw, int *x, int *y)
         *x = scrollbar_get_offset(bw->scroll_x);
         *y = scrollbar_get_offset(bw->scroll_y);
     }
+}
+
+void browser_window_scroll_changed(struct browser_window *bw)
+{
+    if (bw != NULL)
+        html_viewport_scroll(bw->current_content);
 }
 
 /* Exported interface, documented in wisp/browser_window.h. */

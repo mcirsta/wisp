@@ -50,6 +50,10 @@ typedef enum css_pseudo_element {
     CSS_PSEUDO_ELEMENT_COUNT = 25 /**< Number of pseudo elements */
 } css_pseudo_element;
 
+/* Parse one supported, non-functional pseudo-element selector. CSS_INVALID
+ * means invalid/unsupported syntax. CSS2 names permit a single colon. */
+css_error css_parse_pseudo_element(const uint8_t *text, size_t length, css_pseudo_element *out);
+
 /**
  * Style selection result set
  */
