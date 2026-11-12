@@ -17,7 +17,7 @@ if nrArgs != 3:
     print("Three arguments are required: output directory, gen_parser binary location, properties.gen location")
     exit(1)
 
-propFile = open(srcFile, 'r')
+propFile = open(srcFile, 'r', encoding='utf-8')
 Lines = propFile.readlines()
 
 for line in Lines:
