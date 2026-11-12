@@ -149,9 +149,9 @@ static int ns_X509_get_signature_nid(X509 *cert)
     return OBJ_obj2nid(cert->cert_info->key->algor->algorithm);
 }
 
-static const unsigned char *ns_ASN1_STRING_get0_data(ASN1_STRING *asn1str)
+static const unsigned char *ns_ASN1_STRING_get0_data(const ASN1_STRING *asn1str)
 {
-    return (const unsigned char *)ASN1_STRING_data(asn1str);
+    return asn1str->data;
 }
 #else
 #define ns_X509_get_signature_nid X509_get_signature_nid
@@ -320,14 +320,14 @@ static int ns_EVP_PKEY_get_octet_string_param(
  * \param iname The info structure to recive the extracted parameters.
  * \return NSERROR_OK on success else error code
  */
-static nserror xname_to_info(X509_NAME *xname, struct ns_cert_name *iname)
+static nserror xname_to_info(const X509_NAME *xname, struct ns_cert_name *iname)
 {
     int entryidx;
     int entrycnt;
-    X509_NAME_ENTRY *entry; /* current name entry */
-    ASN1_STRING *value;
+    const X509_NAME_ENTRY *entry; /* current name entry */
+    const ASN1_STRING *value;
     const unsigned char *value_str;
-    ASN1_OBJECT *name;
+    const ASN1_OBJECT *name;
     int name_nid;
     char **field;
 
