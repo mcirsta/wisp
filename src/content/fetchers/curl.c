@@ -404,8 +404,11 @@ static struct fetch_postdata *fetch_curl_clone_postdata(const struct fetch_postd
 {
     struct fetch_postdata *postdata;
 
+    /* Normalize the optional body once: later setup and response handling
+     * always operate on an owned, non-null request description. */
+    static const struct fetch_postdata empty = {.type = FETCH_POSTDATA_NONE};
     if (src == NULL)
-        return NULL;
+        src = &empty;
 
     postdata = calloc(1, sizeof(struct fetch_postdata));
     if (postdata != NULL) {
@@ -539,23 +542,8 @@ static void *fetch_curl_setup(struct fetch *parent_fetch, nsurl *url, bool only_
         goto failed;
     }
     fetch->postdata = fetch_curl_clone_postdata(postdata);
-    if (fetch->postdata == NULL && postdata != NULL && postdata->type != FETCH_POSTDATA_NONE) {
-        /* Only fail if allocation failed for actual data.
-           If postdata was NULL or NONE, fetch->postdata being NULL is
-           fine/expected if clone returns NULL for that case. However,
-           fetch_curl_clone_postdata returns a struct even for NONE,
-           unless src is NULL. If src is NULL, we get NULL. If src is
-           NONE, we get a struct with NONE. So checking result against
-           NULL is enough if we expect a struct always unless src was
-           NULL. If src is NULL, fetch->postdata is NULL.
-        */
+    if (fetch->postdata == NULL)
         goto failed;
-    }
-    /* Use a simpler check matching original logic which allocated postdata
-     * even for NONE */
-    if (postdata != NULL && fetch->postdata == NULL) {
-        goto failed;
-    }
 
 #define APPEND(list, value)                                                                                            \
     slist = curl_slist_append(list, value);                                                                            \
@@ -1511,7 +1499,8 @@ static bool fetch_curl_process_headers(struct curl_fetch_info *f)
     http_code = f->http_code;
     NSLOG(wisp, INFO, "HTTP status code %li", http_code);
 
-    if ((http_code == 304) && (f->postdata->type == FETCH_POSTDATA_NONE)) {
+    bool raw = fetch_is_raw_http(f->fetch_handle);
+    if (!raw && (http_code == 304) && (f->postdata->type == FETCH_POSTDATA_NONE)) {
         /* Not Modified && GET request */
         msg.type = FETCH_NOTMODIFIED;
         fetch_send_callback(&msg, f->fetch_handle);
@@ -1519,7 +1508,9 @@ static bool fetch_curl_process_headers(struct curl_fetch_info *f)
     }
 
     /* handle HTTP redirects (3xx response codes) */
-    if (300 <= http_code && http_code < 400 && f->location != 0 && f->location[0] != '\0') {
+    bool redirect = raw ? (http_code == 301 || http_code == 302 || http_code == 303 || http_code == 307 || http_code == 308)
+                        : (300 <= http_code && http_code < 400);
+    if (redirect && f->location != 0 && f->location[0] != '\0') {
         NSLOG(wisp, INFO, "FETCH_REDIRECT, '%s'", f->location);
         msg.type = FETCH_REDIRECT;
         msg.data.redirect = f->location;
@@ -1528,7 +1519,7 @@ static bool fetch_curl_process_headers(struct curl_fetch_info *f)
     }
 
     /* handle HTTP 401 (Authentication errors) */
-    if (http_code == 401) {
+    if (!raw && http_code == 401) {
         msg.type = FETCH_AUTH;
         msg.data.auth.realm = f->realm;
         fetch_send_callback(&msg, f->fetch_handle);
@@ -1801,7 +1792,7 @@ static size_t fetch_curl_data(char *data, size_t size, size_t nmemb, void *_f)
     /* ignore body if this is a 401 reply by skipping it and reset
      * the HTTP response code to enable follow up fetches.
      */
-    if (f->http_code == 401) {
+    if (f->http_code == 401 && !fetch_is_raw_http(f->fetch_handle)) {
         f->http_code = 0;
         return size * nmemb;
     }

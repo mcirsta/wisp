@@ -6,6 +6,8 @@
 #include <dom/core/tokenlist.h>
 #include "private.h"
 
+struct box;
+
 enum qjs_dom_prototype {
     QJS_NODE,
     QJS_ELEMENT,
@@ -66,6 +68,8 @@ JSValue qjs_class_list_get(JSContext *ctx, JSValueConst object);
 JSValue qjs_class_list_set(JSContext *ctx, JSValueConst object, JSValueConst value);
 int qjs_dom_install_images(JSContext *ctx, JSValue *prototypes);
 int qjs_dom_install_geometry(JSContext *ctx, JSValue *prototypes);
+/* Synchronized box lookup; detached and inert nodes have no rendered box. */
+nserror qjs_dom_geometry_box(JSContext *ctx, dom_node *node, struct box **box);
 int qjs_init_rect(JSContext *ctx);
 JSValue qjs_rect_new(JSContext *ctx, double x, double y, double width, double height);
 int qjs_dom_install_properties(JSContext *ctx, JSValue *prototypes);

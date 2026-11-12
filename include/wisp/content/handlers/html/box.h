@@ -128,8 +128,8 @@ typedef enum {
     HAS_STICKY_ANCESTOR = 1 << 27, /* visual queries may need an ancestor's displacement */
     HAS_IFRAME_DESCENDANT = 1 << 28, /* sparse scroll damage includes embedded viewports */
     CONTENTS_SKIPPED = 1 << 29, /* content-visibility:hidden; keep only the principal box */
-    TEXT_BEFORE = 1u << 30, /* text_node is the originating element of ::before */
-    TEXT_AFTER = 1u << 31 /* text_node is the originating element of ::after */
+    TEXT_BEFORE = 1u << 30, /* principal box or text from ::before; text_node is the originating element */
+    TEXT_AFTER = 1u << 31 /* principal box or text from ::after; text_node is the originating element */
 } box_flags;
 
 
@@ -230,7 +230,7 @@ struct box {
      * DOM node that generated this box or NULL
      */
     struct dom_node *node;
-    /** Source DOM text node, or originating element for generated/UA text.
+    /** Source DOM text node, or originating element for generated boxes/UA text.
      * Line fragments borrow the original reference. */
     struct dom_node *text_node;
 

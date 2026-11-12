@@ -7,7 +7,9 @@
 #ifndef WISP_QUICKJS_XHR_H
 #define WISP_QUICKJS_XHR_H
 
-#include "quickjs.h"
+#include "private.h"
+void qjs_xhr_close(jsthread *thread);
+JSValue qjs_xhr_target(JSContext *ctx, JSValueConst object);
 
 /**
  * Initialize XMLHttpRequest constructor on the global object.

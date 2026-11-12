@@ -26,6 +26,10 @@
 #include <climits>
 #ifdef WISP_QT_CAPTURE
 #include "qt/capture_inspect.h"
+extern "C" {
+#include "utils/nsurl.h"
+#include "wisp/content/hlcache.h"
+}
 bool nsqt_capture_disable_scroll_blit;
 #endif
 
@@ -704,6 +708,17 @@ QJsonObject NS_Widget::capturePaintStats() const
 {
     return {{"scroll_blits", qint64(m_scroll_blits)}, {"scroll_repaints", qint64(m_scroll_repaints)},
         {"paint_calls", qint64(m_paint_calls)}, {"paint_pixels", qint64(m_paint_pixels)}};
+}
+
+QJsonObject NS_Widget::captureNavigationState() const
+{
+    if (!m_bw)
+        return {};
+    auto *content = browser_window_get_content(m_bw);
+    return {{"content_url", content ? QString::fromUtf8(nsurl_access(hlcache_handle_get_url(content))) : QString()},
+        {"status", QString::fromUtf8(browser_window_get_status_message(m_bw))},
+        {"load_complete", content && content_get_status(content) == CONTENT_STATUS_DONE &&
+            !browser_window_stop_available(m_bw)}};
 }
 #endif
 

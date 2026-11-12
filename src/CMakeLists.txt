@@ -215,6 +215,8 @@ add_library(wisp ${WISP_LIB_TYPE}
 	content/handlers/javascript/quickjs/input_event.c
 	content/handlers/javascript/quickjs/abort.c
 	content/handlers/javascript/quickjs/xhr.c
+	content/handlers/javascript/quickjs/xhr_http.c
+	content/handlers/javascript/quickjs/xhr_request.c
 	content/handlers/text/textplain.c
 	desktop/cookie_manager.c
 	desktop/knockout.c

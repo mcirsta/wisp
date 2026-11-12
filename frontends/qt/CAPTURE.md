@@ -49,6 +49,28 @@ cursor enum so tests can detect a busy cursor left behind after completion.
 `icons` in `capture.json` and `steps.json` records SHA-256 hashes of the 16×16
 RGBA application, window and tab icons, plus each tab's title and selection
 state. This checks favicon updates without relying on desktop theme styling.
+Each tab also reports its content URL, navigation status and completion state,
+so a background tab's loading failure can be distinguished from the source page.
+
+`--capture-middle-click-id ID` and `--capture-middle-click-point X,Y` exercise
+the Qt middle-button press/release path. `--capture-wheel-angle X,Y` sends wheel
+rotation in eighths of a degree (120 per notch); `--capture-wheel-pixel X,Y`
+sends pixel deltas. Each accepts an optional second pair for the other delta:
+for example `--capture-wheel-angle 0,-120,0,-10` models a Wayland mouse notch
+with accompanying pixel data. Pixel actions represent system gesture input.
+Wheel actions use the normal window handler. Their resulting
+offsets appear in `steps.json`; `wheel_scroll_lines` in `capture.json` records
+the system setting. `qt_tab_navigation` covers cached stylesheets discovered
+while resuming a blocked parser. `qt_wheel_input` and `qt_wheel_input_x11` check
+wheel distance at DPR 1, 1.5, 1.6 and 2, including fine deltas, scroll boundaries,
+and mouse-wheel events from a shared Wayland seat labelled as a touchpad.
+For hardware-specific input differences, `QT_LOGGING_RULES='wisp.input.wheel.debug=true'`
+enables wheel diagnostics in ordinary Qt builds: platform, DPR, input deltas,
+device/source, system line setting, and the scroll offsets before and after.
+The category is silent by default.
+The Qt scrollbar line/arrow step is 40 logical pixels, independent of window
+size and display scaling. With the default three-line wheel setting this gives
+120 logical pixels per notch; touchpad gesture pixels are used directly.
 
 ## Text measurement cache comparisons
 

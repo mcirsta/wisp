@@ -698,6 +698,10 @@ static void box_construct_generate(dom_node *n, struct box_construct_ctx *ctx, s
         return;
     }
     gen->type = type;
+    /* Retain pseudo identity on the principal box as well as its text. Styles
+     * may be interned/shared, and inline owners flatten their generated boxes. */
+    gen->text_node = dom_node_ref(n);
+    gen->flags |= pseudo == CSS_PSEUDO_ELEMENT_BEFORE ? TEXT_BEFORE : TEXT_AFTER;
     gen->flags |= owner->flags & IS_OPACITY_ZERO;
     if (!box_fetch_background(gen, ctx) || !box_construct_insert(gen, parent, &container, ctx->bctx)) {
         if (ctx->error == NSERROR_OK)

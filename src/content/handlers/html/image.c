@@ -468,6 +468,47 @@ void html_image_get_state(html_content *html, dom_node *node, struct html_image_
     }
 }
 
+dom_exception html_image_get_dimension(html_content *html, dom_node *node,
+    const struct box *box, bool height, uint32_t *value)
+{
+    /* https://html.spec.whatwg.org/multipage/embedded-content-other.html#dimension-attributes
+     * Transforms, padding, borders and object-fit do not change the content size. */
+    if (box != NULL) {
+        double pixels = (height ? box->height : box->width) * 96.0 / FIXTOFLT(html->unit_len_ctx.device_dpi);
+        *value = (uint32_t)fmin(UINT32_MAX, fmax(0, round(pixels)));
+        return DOM_NO_ERR;
+    }
+    struct html_image_state state;
+    html_image_get_state(html, node, &state);
+    *value = height ? state.natural_height : state.natural_width;
+    dom_string *attribute = NULL;
+    dom_exception err = dom_element_get_attribute(node, height ? corestring_dom_height : corestring_dom_width, &attribute);
+    if (err != DOM_NO_ERR || attribute == NULL)
+        return err;
+    /* HTML non-negative integer parsing, not C's base-detecting strtoul:
+     * decimal prefix, ASCII whitespace (not VT), optional sign, and -0 allowed.
+     * Accumulate the IDL unsigned-long result without signed overflow. */
+    const char *p = dom_string_data(attribute), *end = p + dom_string_byte_length(attribute);
+    while (p != end && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == '\f'))
+        p++;
+    bool negative = p != end && *p == '-';
+    if (p != end && (*p == '+' || *p == '-'))
+        p++;
+    if (p != end && *p >= '0' && *p <= '9') {
+        uint32_t parsed = 0;
+        bool nonzero = false;
+        while (p != end && *p >= '0' && *p <= '9') {
+            unsigned digit = *p++ - '0';
+            nonzero |= digit != 0;
+            parsed = parsed * 10u + digit;
+        }
+        if (!negative || !nonzero)
+            *value = parsed;
+    }
+    dom_string_unref(attribute);
+    return DOM_NO_ERR;
+}
+
 void html_image_stop(struct html_image *image)
 {
     guit->misc->schedule(-1, image_task, image);

@@ -167,6 +167,13 @@ nserror fetch_start(nsurl *url, nsurl *referer, fetch_callback callback, void *p
     const struct fetch_postdata *postdata, bool verifiable, bool downgrade_tls, const char *headers[],
     struct fetch **fetch_out);
 
+/* Raw HTTP GET for scripted requests. Preserve 304/401 responses and their
+ * bodies instead of invoking resource-cache validation/authentication policy.
+ * Redirects are still reported to the caller, which must authorize each hop. */
+nserror fetch_start_raw(nsurl *url, nsurl *referer, fetch_callback callback, void *p,
+    const char *headers[], struct fetch **fetch_out);
+bool fetch_is_raw_http(const struct fetch *fetch);
+
 /**
  * Abort a fetch.
  */

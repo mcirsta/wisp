@@ -520,6 +520,7 @@ nserror js_closethread(jsthread *thread)
         qjs_trace(thread->ctx, "document.close", "cancel pending timers and jobs");
     thread->closed = true;
     qjs_timers_close(thread);
+    qjs_xhr_close(thread);
     qjs_events_close(thread);
     qjs_dom_close(thread);
     thread->win_priv = NULL;
@@ -864,6 +865,29 @@ static bool js_fire_native_event(
     thread->heap->native_dispatch_depth--;
     qjs_thread_unref(thread);
     return accepted;
+}
+
+bool qjs_dispatch_host_event(jsthread *thread, JSValueConst target, JSValueConst event, const char *source)
+{
+    if (thread->closed)
+        return false;
+    qjs_thread_ref(thread);
+    bool script = thread->heap->execution_depth != 0;
+    bool started = script || qjs_execution_begin(thread->heap);
+    if (!script) {
+        thread->heap->execution_depth--;
+        thread->heap->native_dispatch_depth++;
+    }
+    JSValue result = !started || JS_IsException(event) ? JS_EXCEPTION
+        : qjs_event_target_dispatch(thread->ctx, target, event, false);
+    bool ok = !JS_IsException(result);
+    if (!ok && !script)
+        qjs_report_exception(thread, source, thread->heap->interrupted);
+    JS_FreeValue(thread->ctx, result);
+    if (!script)
+        thread->heap->native_dispatch_depth--;
+    qjs_thread_unref(thread);
+    return ok;
 }
 
 /* exported interfaces documented in js.h */

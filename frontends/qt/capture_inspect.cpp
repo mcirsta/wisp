@@ -578,19 +578,19 @@ bool nsqt_capture_scroll_element(struct hlcache_handle *content, const QString &
 }
 
 /* Exercise the same Qt press/release path as interactive browsing. */
-static void captureMouseClick(QWidget *widget, const QPointF &position)
+static void captureMouseClick(QWidget *widget, const QPointF &position, Qt::MouseButton button = Qt::LeftButton)
 {
     QPointer<QWidget> target(widget);
     const QPointF screen = widget->mapToGlobal(position);
-    QMouseEvent press(QEvent::MouseButtonPress, position, screen, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent press(QEvent::MouseButtonPress, position, screen, button, button, Qt::NoModifier);
     QApplication::sendEvent(target, &press);
     if (target) {
-        QMouseEvent release(QEvent::MouseButtonRelease, position, screen, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QMouseEvent release(QEvent::MouseButtonRelease, position, screen, button, Qt::NoButton, Qt::NoModifier);
         QApplication::sendEvent(target, &release);
     }
 }
 
-bool nsqt_capture_click(QWidget *widget, struct browser_window *bw, const QString &id, bool label)
+bool nsqt_capture_click(QWidget *widget, struct browser_window *bw, const QString &id, bool label, bool middle)
 {
     auto *content = browser_window_get_content(bw);
     if (!content || content_get_type(content) != CONTENT_HTML)
@@ -639,16 +639,17 @@ bool nsqt_capture_click(QWidget *widget, struct browser_window *bw, const QStrin
         y += box->padding[TOP] + qMax(1, box->height / 2);
         const float scale = browser_window_get_scale(bw);
         browser_window_get_scroll(bw, &sx, &sy);
-        captureMouseClick(widget, QPointF((x - sx) * scale, (y - sy) * scale));
+        captureMouseClick(widget, QPointF((x - sx) * scale, (y - sy) * scale),
+            middle ? Qt::MiddleButton : Qt::LeftButton);
     }
     dom_node_unref(target);
     return found;
 }
 
-void nsqt_capture_click_point(QWidget *widget, struct browser_window *bw, int x, int y)
+void nsqt_capture_click_point(QWidget *widget, struct browser_window *bw, int x, int y, bool middle)
 {
     const float scale = browser_window_get_scale(bw);
-    captureMouseClick(widget, QPointF(x * scale, y * scale));
+    captureMouseClick(widget, QPointF(x * scale, y * scale), middle ? Qt::MiddleButton : Qt::LeftButton);
 }
 
 bool nsqt_capture_scroll_point(struct browser_window *bw, int x, int y, int dx, int dy)

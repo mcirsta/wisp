@@ -38,6 +38,8 @@ extern "C" {
 #include "qt/urlbar.cls.h"
 #include "qt/widget.cls.h"
 
+class NS_ScrollBar;
+
 /**
  * Class for netsurf window
  */
@@ -84,8 +86,8 @@ private:
     NS_Actions *m_actions;
     NS_URLBar *m_nsurlbar;
     NS_Widget *m_nswidget;
-    QScrollBar *m_vscrollbar;
-    QScrollBar *m_hscrollbar;
+    NS_ScrollBar *m_vscrollbar;
+    NS_ScrollBar *m_hscrollbar;
     /** status text label */
     QLabel *m_status;
 

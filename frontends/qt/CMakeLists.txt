@@ -152,6 +152,9 @@ if(BUILD_TESTING AND WISP_ENABLE_TESTS)
         add_test(NAME qt_js_clone COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_js_clone.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_js_clone PROPERTIES TIMEOUT 60)
+        add_test(NAME qt_js_xhr COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_js_xhr.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_js_xhr PROPERTIES TIMEOUT 35)
         add_test(NAME qt_js_images COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_js_images.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_js_images PROPERTIES TIMEOUT 60)
@@ -161,6 +164,9 @@ if(BUILD_TESTING AND WISP_ENABLE_TESTS)
         add_test(NAME qt_js_computed_style COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_js_computed_style.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_js_computed_style PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_js_computed_box COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_js_computed_box.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_js_computed_box PROPERTIES TIMEOUT 30)
         add_test(NAME qt_js_view_events COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_js_view_events.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_js_view_events PROPERTIES TIMEOUT 30)
@@ -188,6 +194,9 @@ if(BUILD_TESTING AND WISP_ENABLE_TESTS)
         add_test(NAME qt_favicons COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_favicons.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_favicons PROPERTIES TIMEOUT 40)
+        add_test(NAME qt_tab_navigation COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_tab_navigation.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_tab_navigation PROPERTIES TIMEOUT 60)
     endif()
 
     add_executable(qt_bitmap_cache_test test_bitmap_cache.cpp bitmap.cpp)
@@ -258,8 +267,14 @@ if(WISP_QT_CAPTURE)
     target_sources(wisp-qt PRIVATE capture.cpp capture_inspect.cpp)
     target_compile_definitions(wisp-qt PRIVATE WISP_QT_CAPTURE)
     if(BUILD_TESTING)
+        add_test(NAME qt_wheel_input COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_wheel_input.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_wheel_input PROPERTIES TIMEOUT 45)
         find_program(WISP_TEST_XVFB_RUN NAMES xvfb-run)
         if(WISP_TEST_XVFB_RUN)
+            add_test(NAME qt_wheel_input_x11 COMMAND ${WISP_TEST_XVFB_RUN} -a -s "-screen 0 1920x1600x24"
+                ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_wheel_input.py $<TARGET_FILE:wisp-qt> xcb)
+            set_tests_properties(qt_wheel_input_x11 PROPERTIES TIMEOUT 45)
             add_test(NAME qt_scroll_reuse COMMAND ${WISP_TEST_XVFB_RUN} -a -s "-screen 0 1920x1600x24"
                 ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_scroll_reuse.py $<TARGET_FILE:wisp-qt>)
             set_tests_properties(qt_scroll_reuse PROPERTIES TIMEOUT 120)

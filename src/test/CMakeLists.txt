@@ -369,6 +369,8 @@ add_wisp_test(test_quickjs
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/input_event.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/abort.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/xhr.c
+  ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/xhr_http.c
+  ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/xhr_request.c
   ${CMAKE_BINARY_DIR}/quickjs/console.c
   ${CMAKE_BINARY_DIR}/quickjs/window.c
   ${CMAKE_SOURCE_DIR}/src/test/test_quickjs.c

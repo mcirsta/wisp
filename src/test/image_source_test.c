@@ -120,6 +120,7 @@ static const struct {
 } source_cases[] = {
     {"fallback.png", NULL, NULL, "fallback.png", 1, 1},
     {"", "", NULL, NULL, 1, 1},
+    {" \t\n", NULL, NULL, "", 1, 1},
     {NULL, NULL, NULL, NULL, 1, 1},
     {"fallback.png", "big.png 2x", NULL, "fallback.png", 1, 1},
     {"fallback.png", "big.png 2x", NULL, "big.png", 2, 2},

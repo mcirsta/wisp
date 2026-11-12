@@ -5,12 +5,13 @@
 #include "event_target.h"
 #include "event.h"
 #include "abort.h"
+#include "xhr.h"
 #include <inttypes.h>
 #include <string.h>
 
 struct listener;
-struct view_handlers {
-    JSValue callback[2], listener[2];
+struct event_handlers {
+    JSValue callback[QJS_HANDLERS], listener[QJS_HANDLERS];
 };
 struct qjs_event_target {
     dom_event_target *native;
@@ -20,7 +21,7 @@ struct qjs_event_target {
     bool node;
     uint64_t node_id;
     JSValue object; /* Borrowed identity; temporarily rooted while closing. */
-    struct view_handlers *view_handlers; /* Allocated only for Window IDL handlers. */
+    struct event_handlers *event_handlers; /* Allocated only when an IDL handler is set. */
 };
 
 struct listener {
@@ -77,13 +78,13 @@ static void target_clear(struct qjs_event_target *target, JSRuntime *rt)
 {
     while (target->listeners != NULL)
         listener_remove(target->listeners);
-    if (target->view_handlers != NULL) {
-        for (unsigned i = 0; i < 2; i++) {
-            JS_FreeValueRT(rt, target->view_handlers->callback[i]);
-            JS_FreeValueRT(rt, target->view_handlers->listener[i]);
+    if (target->event_handlers != NULL) {
+        for (unsigned i = 0; i < QJS_HANDLERS; i++) {
+            JS_FreeValueRT(rt, target->event_handlers->callback[i]);
+            JS_FreeValueRT(rt, target->event_handlers->listener[i]);
         }
-        js_free_rt(rt, target->view_handlers);
-        target->view_handlers = NULL;
+        js_free_rt(rt, target->event_handlers);
+        target->event_handlers = NULL;
     }
 }
 
@@ -117,10 +118,10 @@ static void target_mark(JSRuntime *rt, JSValueConst object, JS_MarkFunc *mark)
             JS_MarkValue(rt, l->callback, mark);
             JS_MarkValue(rt, l->signal, mark);
         }
-    if (target != NULL && target->view_handlers != NULL)
-        for (unsigned i = 0; i < 2; i++) {
-            JS_MarkValue(rt, target->view_handlers->callback[i], mark);
-            JS_MarkValue(rt, target->view_handlers->listener[i], mark);
+    if (target != NULL && target->event_handlers != NULL)
+        for (unsigned i = 0; i < QJS_HANDLERS; i++) {
+            JS_MarkValue(rt, target->event_handlers->callback[i], mark);
+            JS_MarkValue(rt, target->event_handlers->listener[i], mark);
         }
 }
 
@@ -164,6 +165,9 @@ static JSValue target_owner(JSContext *ctx, JSValueConst object, bool *window)
     JSValue signal_target = qjs_abort_target(ctx, object);
     if (!JS_IsUndefined(signal_target))
         return signal_target;
+    JSValue xhr_target = qjs_xhr_target(ctx, object);
+    if (!JS_IsUndefined(xhr_target))
+        return xhr_target;
     if (JS_GetOpaque(object, thread->heap->node_class) != NULL) {
         struct qjs_dom_node *node = qjs_dom_get(ctx, object, 0);
         if (node == NULL)
@@ -496,30 +500,28 @@ int qjs_event_target_listen(JSContext *ctx, JSValueConst target, const char *typ
     return JS_IsException(result) ? -1 : 0;
 }
 
-/* Window IDL event handlers are independent registrations, so replacing a
+/* IDL event handlers are independent registrations, so replacing a
  * callback retains its ordering relative to addEventListener registrations. */
-static struct qjs_event_target *window_handler_target(JSContext *ctx, JSValueConst object)
+static struct qjs_event_target *handler_target(JSContext *ctx, JSValueConst object)
 {
     bool window;
     JSValue owner = target_owner(ctx, object, &window);
     if (JS_IsException(owner))
         return NULL;
     jsthread *thread = JS_GetContextOpaque(ctx);
-    struct qjs_event_target *target = window ? JS_GetOpaque(owner, thread->heap->event_target_class) : NULL;
+    struct qjs_event_target *target = JS_GetOpaque(owner, thread->heap->event_target_class);
     JS_FreeValue(ctx, owner);
-    if (!window)
-        JS_ThrowTypeError(ctx, "Window receiver required");
     return target;
 }
 
-static JSValue window_handler_invoke(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv, int kind)
+static JSValue handler_invoke(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv, int kind)
 {
-    struct qjs_event_target *target = window_handler_target(ctx, object);
+    struct qjs_event_target *target = handler_target(ctx, object);
     if (target == NULL)
         return JS_EXCEPTION;
-    if (target->view_handlers == NULL || !JS_IsFunction(ctx, target->view_handlers->callback[kind]))
+    if (target->event_handlers == NULL || !JS_IsFunction(ctx, target->event_handlers->callback[kind]))
         return JS_UNDEFINED; /* Web IDL LegacyTreatNonObjectAsNull: non-callable objects do nothing. */
-    JSValue callback = JS_DupValue(ctx, target->view_handlers->callback[kind]);
+    JSValue callback = JS_DupValue(ctx, target->event_handlers->callback[kind]);
     JSValue result = JS_Call(ctx, callback, object, argc, argv);
     JS_FreeValue(ctx, callback);
     if (JS_IsBool(result) && !JS_ToBool(ctx, result) && argc > 0) {
@@ -530,31 +532,34 @@ static JSValue window_handler_invoke(JSContext *ctx, JSValueConst object, int ar
     return result;
 }
 
-static JSValue window_handler_get(JSContext *ctx, JSValueConst object, int kind)
+JSValue qjs_event_handler_get(JSContext *ctx, JSValueConst object, int kind)
 {
-    struct qjs_event_target *target = window_handler_target(ctx, object);
-    return target == NULL ? JS_EXCEPTION : target->view_handlers == NULL ? JS_NULL
-        : JS_DupValue(ctx, target->view_handlers->callback[kind]);
+    struct qjs_event_target *target = handler_target(ctx, object);
+    return target == NULL                ? JS_EXCEPTION
+        : target->event_handlers == NULL ? JS_NULL
+                                         : JS_DupValue(ctx, target->event_handlers->callback[kind]);
 }
 
-static JSValue window_handler_set(JSContext *ctx, JSValueConst object, JSValueConst value, int kind)
+JSValue qjs_event_handler_set(JSContext *ctx, JSValueConst object, JSValueConst value, int kind)
 {
-    struct qjs_event_target *target = window_handler_target(ctx, object);
+    struct qjs_event_target *target = handler_target(ctx, object);
     if (target == NULL)
         return JS_EXCEPTION;
-    const char *type = kind == 0 ? "scroll" : "resize";
+    static const char *types[QJS_HANDLERS] = {"scroll", "resize", "load", "error",
+        "readystatechange", "loadstart", "progress", "abort", "timeout", "loadend"};
+    const char *type = types[kind];
     if (!JS_IsObject(value))
         value = JS_NULL;
-    struct view_handlers *handlers = target->view_handlers;
+    struct event_handlers *handlers = target->event_handlers;
     if (handlers == NULL) {
         if (JS_IsNull(value))
             return JS_UNDEFINED;
         handlers = js_malloc(ctx, sizeof(*handlers));
         if (handlers == NULL)
             return JS_EXCEPTION;
-        for (unsigned i = 0; i < 2; i++)
+        for (unsigned i = 0; i < QJS_HANDLERS; i++)
             handlers->callback[i] = handlers->listener[i] = JS_NULL;
-        target->view_handlers = handlers;
+        target->event_handlers = handlers;
     }
     if (JS_IsNull(value)) {
         if (!JS_IsNull(handlers->listener[kind])) {
@@ -564,7 +569,7 @@ static JSValue window_handler_set(JSContext *ctx, JSValueConst object, JSValueCo
             handlers->listener[kind] = JS_NULL;
         }
     } else if (JS_IsNull(handlers->listener[kind])) {
-        JSValue listener = JS_NewCFunctionMagic(ctx, window_handler_invoke, "", 1, JS_CFUNC_generic_magic, kind);
+        JSValue listener = JS_NewCFunctionMagic(ctx, handler_invoke, "", 1, JS_CFUNC_generic_magic, kind);
         if (JS_IsException(listener))
             return listener;
         if (qjs_event_target_listen(ctx, object, type, listener, true) < 0) {
@@ -578,6 +583,28 @@ static JSValue window_handler_set(JSContext *ctx, JSValueConst object, JSValueCo
     JS_FreeValue(ctx, previous);
     qjs_trace(ctx, "event.handler", "type=%s active=%d", type, !JS_IsNull(value));
     return JS_UNDEFINED;
+}
+
+/* Window's accessors retain their Window-only brand check; other interfaces
+ * can expose the same storage without making EventTarget itself a handler host. */
+static bool window_handler_receiver(JSContext *ctx, JSValueConst object)
+{
+    JSValue global = JS_GetGlobalObject(ctx);
+    bool valid = JS_IsUndefined(object) || JS_IsNull(object) || JS_IsStrictEqual(ctx, object, global);
+    JS_FreeValue(ctx, global);
+    if (!valid)
+        JS_ThrowTypeError(ctx, "Window receiver required");
+    return valid;
+}
+
+static JSValue window_handler_get(JSContext *ctx, JSValueConst object, int kind)
+{
+    return window_handler_receiver(ctx, object) ? qjs_event_handler_get(ctx, object, kind) : JS_EXCEPTION;
+}
+
+static JSValue window_handler_set(JSContext *ctx, JSValueConst object, JSValueConst value, int kind)
+{
+    return window_handler_receiver(ctx, object) ? qjs_event_handler_set(ctx, object, value, kind) : JS_EXCEPTION;
 }
 
 static JSValue
@@ -682,10 +709,10 @@ int qjs_init_event_target(JSContext *ctx)
     JSValue ctor = JS_NewCFunction2(ctx, target_constructor, "EventTarget", 0, JS_CFUNC_constructor, 0);
     int ret = -1;
     static const JSCFunctionListEntry handlers[] = {
-        JS_CGETSET_MAGIC_DEF2("onscroll", window_handler_get, window_handler_set, 0,
-            JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE),
-        JS_CGETSET_MAGIC_DEF2("onresize", window_handler_get, window_handler_set, 1,
-            JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE),
+        JS_CGETSET_MAGIC_DEF2(
+            "onscroll", window_handler_get, window_handler_set, 0, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE),
+        JS_CGETSET_MAGIC_DEF2(
+            "onresize", window_handler_get, window_handler_set, 1, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE),
     };
     if (JS_IsException(proto) || JS_IsException(ctor) ||
         JS_SetPropertyFunctionList(

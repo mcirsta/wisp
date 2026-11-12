@@ -9,6 +9,7 @@
 #include <libdom/bindings/hubbub/parser.h>
 #include <wisp/desktop/gui_internal.h>
 #include <wisp/misc.h>
+#include <wisp/content/content.h>
 #include <wisp/layout.h>
 #include <wisp/utils/corestrings.h>
 #include <wisp/utils/nsoption.h>
@@ -203,9 +204,25 @@ static void text(dom_node *parent, const char *value)
     dom_node_unref(node);
 }
 
+/* Responsive source selection asks the normal content-user boundary for the
+ * viewport, including before the first layout. Model that boundary here too. */
+static void viewport_message(struct content *content, content_msg message,
+    const union content_msg_data *data, void *pw)
+{
+    (void)content;
+    (void)pw;
+    if (message == CONTENT_MSG_GETDIMS) {
+        *data->getdims.viewport_width = 800;
+        *data->getdims.viewport_height = 600;
+    }
+}
+
 static void setup(void)
 {
     memset(&html, 0, sizeof(html));
+    static struct content_user viewport = {.callback = viewport_message};
+    static struct content_user sentinel = {.next = &viewport};
+    html.base.user_list = &sentinel;
     scheduled = NULL;
     scheduled_pw = NULL;
     completions = slices = 0;
@@ -2440,19 +2457,22 @@ END_TEST
 
 static const struct {
     const char *src, *srcset, *alt, *style;
-    bool quirks, images, replaced, request;
+    bool quirks, images, replaced;
+    const char *request;
 } image_preflight_cases[] = {
-    {NULL, NULL, "alternative", "display:block", false, true, false, false},
-    {"", NULL, "alternative", "display:block", false, true, false, false},
-    {" \t\n", NULL, "alternative", "display:block", false, true, false, false},
-    {NULL, NULL, "", "display:block", false, true, true, false},
-    {NULL, NULL, NULL, "display:block", false, true, true, false},
-    {"plot.svg", NULL, "alternative", "display:block", false, true, true, true},
-    {"", "plot.svg 800w", "alternative", "display:block", false, true, true, true},
-    {"plot.svg", NULL, "alternative", "display:block", false, false, false, false},
-    {NULL, NULL, "alternative", "width:50px;height:20px", true, true, true, false},
-    {NULL, NULL, "alternative", "display:block", true, true, false, false},
-    {NULL, NULL, "alternative", "width:50px;height:20px", false, true, false, false},
+    {NULL, NULL, "alternative", "display:block", false, true, false, NULL},
+    {"", NULL, "alternative", "display:block", false, true, false, NULL},
+    /* HTML source-set creation preserves a nonempty src. URL parsing resolves
+     * whitespace to the document URL; only the subsequent decode can fail. */
+    {" \t\n", NULL, "alternative", "display:block", false, true, true, "file:///context.html"},
+    {NULL, NULL, "", "display:block", false, true, true, NULL},
+    {NULL, NULL, NULL, "display:block", false, true, true, NULL},
+    {"plot.svg", NULL, "alternative", "display:block", false, true, true, "file:///plot.svg"},
+    {"", "plot.svg 800w", "alternative", "display:block", false, true, true, "file:///plot.svg"},
+    {"plot.svg", NULL, "alternative", "display:block", false, false, false, NULL},
+    {NULL, NULL, "alternative", "width:50px;height:20px", true, true, true, NULL},
+    {NULL, NULL, "alternative", "display:block", true, true, false, NULL},
+    {NULL, NULL, "alternative", "width:50px;height:20px", false, true, false, NULL},
 };
 
 START_TEST(test_image_fallback_preflight)
@@ -2478,9 +2498,9 @@ START_TEST(test_image_fallback_preflight)
         bool replaced;
         ck_assert(box_image_prepare(image, &html, styles->styles[CSS_PSEUDO_ELEMENT_NONE], &source, &replaced));
         ck_assert_msg(replaced == image_preflight_cases[_i].replaced, "Image representation case %d", _i);
-        ck_assert_msg((source != NULL) == image_preflight_cases[_i].request, "Image URL case %d", _i);
+        ck_assert_msg((source != NULL) == (image_preflight_cases[_i].request != NULL), "Image URL case %d", _i);
         if (source != NULL) {
-            ck_assert_str_eq(nsurl_access(source), "file:///plot.svg");
+            ck_assert_str_eq(nsurl_access(source), image_preflight_cases[_i].request);
             nsurl_unref(source);
         }
         ck_assert_uint_eq(html.num_objects, 0);

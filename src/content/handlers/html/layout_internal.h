@@ -54,6 +54,10 @@ static inline bool lh__is_resolved(int value)
 
 /* Note: enum css_size_type and struct css_size are defined in box.h */
 
+/* Shared relative-position solution, used by layout and CSSOM resolved insets.
+ * Requires a laid-out box with a parent and position:relative. */
+void layout_compute_relative_offset(const css_unit_ctx *units, struct box *box, int *x, int *y);
+
 /**
  * Layout a block formatting context.
  *

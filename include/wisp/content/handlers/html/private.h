@@ -192,6 +192,7 @@ typedef struct html_content {
     struct content base;
 
     dom_hubbub_parser *parser; /**< Parser object handle */
+    bool parser_active; /**< A parser entry point is still on the stack. */
     bool parse_completed; /**< Whether the parse has been completed */
     enum html_document_readiness readiness;
     bool dom_content_loaded; /**< DOMContentLoaded has been dispatched. */

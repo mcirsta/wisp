@@ -628,16 +628,24 @@ static void test_zero_analysis_preserves_percentage_resolution(void)
     }
 }
 
-static void test_relative_offsets_with_calc(void)
+static void test_computed_relative_insets(void)
 {
     style_case ctx;
     const css_computed_style *style = select_style_from_css("* { position: relative; top: auto; bottom: auto; }", &ctx);
 
     css_fixed_or_calc length = (css_fixed_or_calc)0;
     css_unit unit = CSS_UNIT_PX;
-    assert(css_computed_top(style, &length, &unit) == CSS_TOP_SET);
-    assert(unit == CSS_UNIT_PX);
-    assert(length.value == 0);
+    /* Computed insets retain auto; the layout solver resolves the used
+     * relative offsets after establishing the containing block. */
+    assert(css_computed_top(style, &length, &unit) == CSS_TOP_AUTO);
+    assert(css_computed_bottom(style, &length, &unit) == CSS_BOTTOM_AUTO);
+    destroy_style_case(&ctx);
+
+    style = select_style_from_css("* { position: relative; top: auto; bottom: calc(25% + 3px); }", &ctx);
+    assert(css_computed_top(style, &length, &unit) == CSS_TOP_AUTO);
+    assert(css_computed_bottom(style, &length, &unit) == CSS_BOTTOM_SET);
+    assert(unit == CSS_UNIT_CALC);
+    expect_calc_px("relative bottom", style, &unit_ctx, 200, css_computed_bottom, CSS_BOTTOM_SET, 53);
     destroy_style_case(&ctx);
 }
 
@@ -1075,7 +1083,7 @@ int main(void)
     test_length_to_px_invalid_percent();
     test_length_is_zero();
     test_zero_analysis_preserves_percentage_resolution();
-    test_relative_offsets_with_calc();
+    test_computed_relative_insets();
     test_width_px_calc();
     test_calc_precision();
     test_calc_nonfinite();

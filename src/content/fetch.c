@@ -81,6 +81,7 @@ struct fetch {
     nsurl *url; /**< URL. */
     nsurl *referer; /**< Referer URL. */
     bool verifiable; /**< Transaction is verifiable */
+    bool raw_http; /**< Caller owns HTTP response/redirect policy. */
     void *p; /**< Private data for callback. */
     lwc_string *host; /**< Host part of URL, interned */
     long http_code; /**< HTTP response code, or 0. */
@@ -344,9 +345,9 @@ nserror fetcher_add(lwc_string *scheme, const struct fetcher_operation_table *op
 }
 
 /* exported interface documented in content/fetch.h */
-nserror fetch_start(nsurl *url, nsurl *referer, fetch_callback callback, void *p, bool only_2xx,
+static nserror fetch_start_internal(nsurl *url, nsurl *referer, fetch_callback callback, void *p, bool only_2xx,
     const struct fetch_postdata *postdata, bool verifiable, bool downgrade_tls, const char *headers[],
-    struct fetch **fetch_out)
+    bool raw_http, struct fetch **fetch_out)
 {
     struct fetch *fetch;
     lwc_string *scheme;
@@ -374,6 +375,7 @@ nserror fetch_start(nsurl *url, nsurl *referer, fetch_callback callback, void *p
     fetch->callback = callback;
     fetch->url = nsurl_ref(url);
     fetch->verifiable = verifiable;
+    fetch->raw_http = raw_http;
     fetch->p = p;
     fetch->host = nsurl_get_component(url, NSURL_HOST);
 
@@ -415,6 +417,26 @@ nserror fetch_start(nsurl *url, nsurl *referer, fetch_callback callback, void *p
 
     *fetch_out = fetch;
     return NSERROR_OK;
+}
+
+/* Resource callers retain their existing HTTP policy. */
+nserror fetch_start(nsurl *url, nsurl *referer, fetch_callback callback, void *p, bool only_2xx,
+    const struct fetch_postdata *postdata, bool verifiable, bool downgrade_tls, const char *headers[],
+    struct fetch **fetch_out)
+{
+    return fetch_start_internal(url, referer, callback, p, only_2xx, postdata, verifiable,
+        downgrade_tls, headers, false, fetch_out);
+}
+
+nserror fetch_start_raw(nsurl *url, nsurl *referer, fetch_callback callback, void *p,
+    const char *headers[], struct fetch **fetch_out)
+{
+    return fetch_start_internal(url, referer, callback, p, false, NULL, false, false, headers, true, fetch_out);
+}
+
+bool fetch_is_raw_http(const struct fetch *fetch)
+{
+    return fetch->raw_http;
 }
 
 /* exported interface documented in content/fetch.h */

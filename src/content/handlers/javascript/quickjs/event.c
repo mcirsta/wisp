@@ -6,6 +6,13 @@
 #include "input_event.h"
 #include <nsutils/time.h>
 #include <string.h>
+#include <math.h>
+
+struct qjs_progress_event {
+    struct qjs_event base;
+    bool computable;
+    double loaded, total;
+};
 
 struct qjs_submit_event {
     struct qjs_event base;
@@ -212,6 +219,7 @@ JSValue qjs_event_allocate(JSContext *ctx, JSValue object, enum qjs_event_kind k
     }
     size_t size = kind == QJS_POINTER_EVENT ? sizeof(struct qjs_pointer_event)
         : qjs_event_is_ui(kind)             ? sizeof(struct qjs_input_event)
+        : kind == QJS_PROGRESS_EVENT        ? sizeof(struct qjs_progress_event)
         : kind == QJS_SUBMIT_EVENT          ? sizeof(struct qjs_submit_event)
                                             : sizeof(struct qjs_event);
     struct qjs_event *event = js_mallocz(ctx, size);
@@ -363,6 +371,60 @@ int qjs_event_read_options(JSContext *ctx, JSValueConst dict, struct qjs_event_o
         : 0;
 }
 
+static int progress_options(JSContext *ctx, JSValueConst dict, struct qjs_progress_event *progress)
+{
+    if (!JS_IsObject(dict))
+        return 0;
+    if (boolean_member(ctx, dict, "lengthComputable", &progress->computable) < 0)
+        return -1;
+    const char *names[] = {"loaded", "total"};
+    double *values[] = {&progress->loaded, &progress->total};
+    for (unsigned i = 0; i < 2; i++) {
+        JSValue value = JS_GetPropertyStr(ctx, dict, names[i]);
+        double number = 0;
+        int ret = JS_IsException(value) ? -1 : JS_IsUndefined(value) ? 0 : JS_ToFloat64(ctx, &number, value);
+        JS_FreeValue(ctx, value);
+        if (ret < 0)
+            return -1;
+        /* Web IDL unsigned long long, without [EnforceRange] or [Clamp]. */
+        number = isfinite(number) ? fmod(trunc(number), 0x1p64) : 0;
+        *values[i] = number == 0 ? 0 : number < 0 ? number + 0x1p64 : number;
+    }
+    return 0;
+}
+
+static JSValue progress_get(JSContext *ctx, JSValueConst object, int property)
+{
+    struct qjs_event *base = qjs_event_get(ctx, object);
+    if (base == NULL)
+        return JS_EXCEPTION;
+    if (base->kind != QJS_PROGRESS_EVENT)
+        return JS_ThrowTypeError(ctx, "ProgressEvent receiver required");
+    struct qjs_progress_event *event = (struct qjs_progress_event *)base;
+    return property == 0 ? JS_NewBool(ctx, event->computable)
+                         : JS_NewFloat64(ctx, property == 1 ? event->loaded : event->total);
+}
+
+JSValue qjs_progress_event_create(JSContext *ctx, const char *type, double loaded, double total)
+{
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    dom_string *name;
+    dom_exception err = dom_string_create((const uint8_t *)type, strlen(type), &name);
+    if (err != DOM_NO_ERR)
+        return qjs_dom_exception(ctx, err);
+    JSValue object = qjs_event_allocate(ctx,
+        JS_NewObjectClass(ctx, thread->heap->event_class[QJS_PROGRESS_EVENT]), QJS_PROGRESS_EVENT, false);
+    if (!JS_IsException(object)) {
+        struct qjs_progress_event *event = (struct qjs_progress_event *)qjs_event_get(ctx, object);
+        event->computable = total > 0;
+        event->loaded = loaded;
+        event->total = total;
+        dom_event_init(event->base.native, name, false, false);
+    }
+    dom_string_unref(name);
+    return object;
+}
+
 static JSValue event_constructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv, int kind)
 {
     jsthread *thread = JS_GetContextOpaque(ctx);
@@ -374,7 +436,10 @@ static JSValue event_constructor(JSContext *ctx, JSValueConst new_target, int ar
     JSValue payload = JS_NULL, object = JS_EXCEPTION;
     JSValueConst dict = argc > 1 ? argv[1] : JS_UNDEFINED;
     struct qjs_event_options options = {0};
+    struct qjs_progress_event progress = {0};
     if (qjs_event_read_options(ctx, dict, &options) < 0)
+        goto out;
+    if (kind == QJS_PROGRESS_EVENT && progress_options(ctx, dict, &progress) < 0)
         goto out;
     if ((kind == QJS_CUSTOM_EVENT || kind == QJS_SUBMIT_EVENT) && JS_IsObject(dict)) {
         payload = JS_GetPropertyStr(ctx, dict, kind == QJS_CUSTOM_EVENT ? "detail" : "submitter");
@@ -403,6 +468,12 @@ static JSValue event_constructor(JSContext *ctx, JSValueConst new_target, int ar
         else
             event->detail = payload;
         payload = JS_NULL;
+        if (kind == QJS_PROGRESS_EVENT) {
+            struct qjs_progress_event *value = (struct qjs_progress_event *)event;
+            value->computable = progress.computable;
+            value->loaded = progress.loaded;
+            value->total = progress.total;
+        }
         dom_event_init(event->native, type, options.bubbles, options.cancelable);
         dom_event_set_is_trusted(event->native, false);
     }
@@ -519,8 +590,8 @@ static const JSCFunctionListEntry submit_properties[] = {EVENT_GET("submitter", 
 
 int qjs_init_events(JSContext *ctx)
 {
-    static const char *names[] = {"Event", "CustomEvent", "UIEvent", "MouseEvent", "SubmitEvent", "PointerEvent"};
-    static const unsigned parents[] = {QJS_EVENT, QJS_EVENT, QJS_EVENT, QJS_UI_EVENT, QJS_EVENT, QJS_MOUSE_EVENT};
+    static const char *names[] = {"Event", "CustomEvent", "UIEvent", "MouseEvent", "SubmitEvent", "PointerEvent", "ProgressEvent"};
+    static const unsigned parents[] = {QJS_EVENT, QJS_EVENT, QJS_EVENT, QJS_UI_EVENT, QJS_EVENT, QJS_MOUSE_EVENT, QJS_EVENT};
     jsthread *thread = JS_GetContextOpaque(ctx);
     JSClassID local[QJS_EVENT_CLASSES] = {0};
     JSClassID *ids = thread != NULL ? thread->heap->event_class : local;
@@ -545,6 +616,13 @@ int qjs_init_events(JSContext *ctx)
         int result;
         if (qjs_event_is_ui(i)) {
             result = qjs_input_event_properties(ctx, protos[i], i);
+        } else if (i == QJS_PROGRESS_EVENT) {
+            static const JSCFunctionListEntry properties[] = {
+                JS_CGETSET_MAGIC_DEF2("lengthComputable", progress_get, NULL, 0, JS_PROP_C_W_E),
+                JS_CGETSET_MAGIC_DEF2("loaded", progress_get, NULL, 1, JS_PROP_C_W_E),
+                JS_CGETSET_MAGIC_DEF2("total", progress_get, NULL, 2, JS_PROP_C_W_E),
+            };
+            result = JS_SetPropertyFunctionList(ctx, protos[i], properties, sizeof(properties) / sizeof(*properties));
         } else if (i == QJS_SUBMIT_EVENT) {
             result = JS_SetPropertyFunctionList(ctx, protos[i], submit_properties,
                 sizeof(submit_properties) / sizeof(*submit_properties));

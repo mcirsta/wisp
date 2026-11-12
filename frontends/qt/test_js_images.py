@@ -21,7 +21,7 @@ prefix = '''<!doctype html><meta charset="utf-8"><title>Image requests</title>
 script = r'''
 const output=document.getElementById('result'), img=document.getElementById('image');
 function check(ok, message){if(!ok)throw Error(message)}
-function fail(e){output.className='FAIL';output.textContent=e.message;console.log('IMAGE_FAIL:'+e.stack)}
+function fail(e){output.className='FAIL: '+e.message;output.textContent=e.message;console.log('IMAGE_FAIL:'+e.stack)}
 let loads=0, errors=0, windowLoads=0;
 window.addEventListener('load',()=>windowLoads++);
 img.addEventListener('load',e=>{
@@ -92,6 +92,70 @@ run().catch(fail);
 '''
 
 
+# The Image factory uses the same element request state as parser-created IMG.
+# Content-box dimensions follow HTML's dimension-attributes algorithm; a hidden
+# or detached element falls back to attributes/natural sizes independently.
+factory_script = r"""
+const output=document.getElementById('result');
+function check(ok,message){if(!ok)throw Error(message)}
+function fail(e){output.className='FAIL: '+e.message;output.textContent=e.message;console.log('IMAGE_FAIL:'+e.stack)}
+let windowLoads=0;
+window.addEventListener('load',()=>windowLoads++);
+async function run(){
+  const img=new Image(96);
+  let inSetter=false, calls=0, order=[];
+  const loaded=new Promise((resolve,reject)=>{
+    img.addEventListener('load',()=>order.push('before'));
+    img.onload=()=>reject(Error('replaced handler called'));
+    img.addEventListener('load',()=>order.push('after'));
+    img.onload=function(e){
+      try {
+        check(!inSetter && this===img && e.target===img && e.currentTarget===img &&
+          e.isTrusted && !e.bubbles && !e.cancelable,'native handler and task');
+        check(img.complete && img.naturalWidth===200 && img.naturalHeight===150,'density-corrected request');
+        check(img.width===96 && img.height===150 && !img.isConnected,'detached attribute/natural dimensions');
+        calls++;order.push('handler');this.onload=this.onerror=null;resolve();
+      }catch(e){reject(e)}
+    };
+    img.onerror=()=>reject(Error('unexpected load failure'));
+  });
+  img.style.cssText='display:block;width:80px;height:60px;padding:3px;border:2px solid;transform:scale(2);object-fit:contain';
+  inSetter=true;img.srcset='/factory.png 2x';inSetter=false;
+  check(!img.complete && img.width===96 && img.height===0,'pending detached dimensions ignore CSS');
+  await loaded;
+  img.id='image';document.body.appendChild(img);
+  check(img.width===80 && img.height===60 && img.offsetWidth===90,'rendered content dimensions');
+  img.style.boxSizing='border-box';
+  check(img.width===70 && img.height===50,'border-box reports content');
+  img.style.visibility='hidden';check(img.width===70,'visibility retains rendered box');
+  img.style.display='none';check(img.width===96 && img.height===150,'display none uses dimension attributes');
+  img.setAttribute('width','bad');check(img.width===200,'invalid attribute uses natural size');
+  img.setAttribute('width','-1');check(img.width===200,'negative attribute uses natural size');
+  img.setAttribute('width','-0');check(img.width===0,'negative zero is a valid dimension');
+  img.style.cssText='display:block';img.width=100;img.height=75;
+  check(img.width===100 && img.height===75 && img.naturalWidth===200,'dimension write changes layout only');
+  document.body.removeChild(img);check(img.width===100 && img.height===75,'removed box is not reused');
+  document.body.appendChild(img);
+  const broken=new Image();
+  await new Promise((resolve,reject)=>{
+    broken.onerror=function(e){
+      try{check(this===broken && e.isTrusted && e.type==='error' && broken.complete &&
+        broken.width===0 && broken.height===0 && broken.naturalWidth===0,'native broken request');
+        this.onerror=null;resolve()}catch(e){reject(e)}
+    };
+    broken.onload=()=>reject(Error('broken image loaded'));broken.src='/factory-broken.png';
+  });
+  setTimeout(()=>{
+    try{check(order.join()==='before,handler,after','handler registration position');
+      check(calls===1 && img.onload===null && img.onerror===null,'no event duplication on box replacement');
+      check(windowLoads===1 && document.readyState==='complete','image handlers settle before Window completion');
+      output.className='PASS'}catch(e){fail(e)}
+  },180);
+}
+run().catch(fail);
+"""
+
+
 responsive_markup = """<div id="result"></div>
 <img id="two" srcset="/initial.png 2x">
 <img id="four" srcset="/initial.png 4x">
@@ -129,7 +193,11 @@ class HTTP(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         requests.append(self.path)
         code, mime, delay = 200, 'text/html; charset=utf-8', 0
-        if self.path == '/state':
+        if self.path == '/factory':
+            body = (prefix + '<div id="result"></div><script>' + factory_script + '</script>').encode()
+        elif self.path == '/factory-reference':
+            body = (prefix + '<div id="result" class="PASS"></div><img id="image" src="/initial.png" width="100" height="75">').encode()
+        elif self.path == '/state':
             body = (prefix + '<div id="result"></div><img id="image" src="/initial.png"><script>' + script + '</script>').encode()
         elif self.path == '/reference':
             body = (prefix + '<body style="padding-left:7px"><div id="result" class="PASS"></div>'
@@ -172,7 +240,7 @@ setTimeout(()=>{document.getElementById('result').className=!img.complete &&
             body = (prefix + '<img src="/very-slow.png"><script>setTimeout(()=>location.assign("/next"),100)</script>').encode()
         elif self.path == '/next':
             body = (prefix + '<div id="result" class="PASS">Navigated</div>').encode()
-        elif self.path in ('/initial.png', '/replacement.png', '/detached.png', '/very-slow.png', '/canceled.png'):
+        elif self.path in ('/initial.png', '/replacement.png', '/detached.png', '/very-slow.png', '/canceled.png', '/factory.png'):
             body, mime = (small if self.path == '/replacement.png' else wide), 'image/png'
             delay = .8 if self.path in ('/very-slow.png', '/canceled.png') else .15
         else:
@@ -198,7 +266,7 @@ env = dict(os.environ, QT_QPA_PLATFORM='offscreen', QT_SCALE_FACTOR='1',
 try:
     with tempfile.TemporaryDirectory(prefix='wisp-js-images-') as tmp:
         state_pixels = None
-        for case in ('state', 'reference', 'responsive', 'responsive-reference', 'responsive-narrow',
+        for case in ('factory', 'factory-reference', 'state', 'reference', 'responsive', 'responsive-reference', 'responsive-narrow',
                      'responsive-narrow-reference', 'supersede', 'disabled', 'navigate'):
             requests.clear()
             dest = Path(tmp) / case
@@ -219,7 +287,14 @@ try:
             dom = (dest / 'dom.txt').read_text()
             assert 'class="PASS"' in dom, (case, dom, diagnostic)
             assert 'JavaScript exception' not in log and 'IMAGE_FAIL:' not in log, (case, diagnostic)
-            if case == 'state':
+            if case == 'factory':
+                factory_pixels = (dest / 'page.png').read_bytes()
+                assert requests.count('/factory.png') == 1 and requests.count('/factory-broken.png') == 1, requests
+                inspection = json.loads((dest / 'inspection.json').read_text())
+                assert inspection['active_resources'] == 0, inspection
+            elif case == 'factory-reference':
+                assert (dest / 'page.png').read_bytes() == factory_pixels, 'Factory image differs from static reference'
+            elif case == 'state':
                 state_pixels = (dest / 'page.png').read_bytes()
                 inspection = json.loads((dest / 'inspection.json').read_text())
                 assert inspection['active_resources'] == 0, inspection

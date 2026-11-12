@@ -639,6 +639,7 @@ static nserror html_create_html_data(html_content *c, const http_parameter *para
     NSLOG(wisp, DEBUG, ">>> html_create_html_data called for content %p", c);
 
     c->parser = NULL;
+    c->parser_active = false;
     c->parse_completed = false;
     c->readiness = HTML_DOCUMENT_LOADING;
     c->dom_content_loaded = false;
@@ -895,7 +896,9 @@ static nserror html_process_encoding_change(struct content *c, const char *data,
      * the encoding is now specified at parser start which means
      * it cannot be changed again.
      */
+    html->parser_active = true;
     error = dom_hubbub_parser_parse_chunk(html->parser, source_data, source_size);
+    html->parser_active = false;
 
     return libdom_hubbub_error_to_nserror(error);
 }
@@ -930,7 +933,9 @@ static bool html_process_data(struct content *c, const char *data, unsigned int 
         return false;
     }
 
+    html->parser_active = true;
     dom_ret = dom_hubbub_parser_parse_chunk(html->parser, (const uint8_t *)data, size);
+    html->parser_active = false;
 
     err = libdom_hubbub_error_to_nserror(dom_ret);
 
@@ -1007,7 +1012,8 @@ bool html_can_begin_conversion(html_content *htmlc)
     unsigned int i;
 
     /* If conversion has already begun, don't start again */
-    if (htmlc->conversion_begun || htmlc->aborted || htmlc->parser_blocking_script != 0)
+    if (htmlc->conversion_begun || htmlc->aborted || htmlc->parser_blocking_script != 0 ||
+        htmlc->parser_active || htmlc->scripts_running)
         return false;
 
     /* We can begin conversion when:
@@ -1050,6 +1056,13 @@ void html_resume_conversion_cb(void *p)
 
 bool html_begin_conversion(html_content *htmlc)
 {
+    /* Cached resources can call back synchronously from a parser DOM callback,
+     * including while unpausing after a blocking script. Completing the parser
+     * there would inject EOF into an unfinished token. The owning parser/script
+     * entry checks conversion again once it has returned. */
+    if (htmlc->parser_active || htmlc->scripts_running)
+        return true;
+
     PERF("html_begin_conversion START (active=%d)", htmlc->base.active);
     dom_node *html;
     nserror ns_error;
@@ -1073,7 +1086,9 @@ bool html_begin_conversion(html_content *htmlc)
         PERF("html_begin_conversion: completing parse (active=%d, scripts_active=%d)", htmlc->base.active,
             htmlc->scripts_active);
         /* complete parsing */
+        htmlc->parser_active = true;
         error = dom_hubbub_parser_completed(htmlc->parser);
+        htmlc->parser_active = false;
         PERF("html_begin_conversion: parse completed, error=%d (active=%d, scripts_active=%d)", error,
             htmlc->base.active, htmlc->scripts_active);
         if (error == DOM_HUBBUB_HUBBUB_ERR_PAUSED) {

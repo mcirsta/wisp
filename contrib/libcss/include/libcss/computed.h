@@ -225,6 +225,8 @@ uint8_t css_computed_list_style_image(const css_computed_style *style, lwc_strin
 
 uint8_t css_computed_quotes(const css_computed_style *style, lwc_string ***quotes);
 
+/* Insets retain their computed lengths/percentages/auto. Relative opposites,
+ * static positioning and over-constraint are used-value decisions for layout. */
 uint8_t css_computed_top(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_right(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
@@ -515,12 +517,23 @@ uint8_t css_computed_object_position(
 uint8_t css_computed_transform(
     const css_computed_style *style, uint32_t *n_functions, const css_transform_function **functions);
 
-/* Serialize an implemented computed-value family. Unknown CSS names give an
- * empty string; known but unimplemented serializers return CSS_INVALID, never
- * a fabricated value. Currently opacity, visibility and overflow are covered.
- * On success *out is an owned reference; on failure it is NULL. */
-css_error css_computed_property_value(
-    const css_computed_style *style, const char *name, size_t length, lwc_string **out);
+/* Context for CSSOM resolved values. LibCSS owns property identities and
+ * serialization; the renderer optionally supplies used lengths in CSS pixels.
+ * used_length receives a canonical longhand name. CSS_PROPERTY_NOT_SET means
+ * the used-value rule does not apply: serialize the computed value instead.
+ * Other failures propagate. blockify includes roots and flex/grid items. */
+struct css_computed_value_ctx {
+    const css_unit_ctx *units;
+    bool blockify;
+    css_error (*used_length)(void *pw, const char *name, css_fixed *value);
+    void *pw;
+};
+
+/* Unknown names give an empty string; unimplemented serializers return
+ * CSS_INVALID, never a fabricated value. On success *out is owned; on failure
+ * it is NULL. The context may be NULL for context-independent properties. */
+css_error css_computed_property_value(const css_computed_style *style,
+    const struct css_computed_value_ctx *ctx, const char *name, size_t length, lwc_string **out);
 
 #ifdef __cplusplus
 }

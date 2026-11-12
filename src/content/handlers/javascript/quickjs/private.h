@@ -9,6 +9,7 @@
 #include "quickjs.h"
 #include "content/handlers/javascript/js.h"
 
+struct qjs_xhr;
 struct qjs_timer;
 struct qjs_rejection;
 struct qjs_dom_document;
@@ -22,6 +23,7 @@ enum qjs_event_kind {
     QJS_MOUSE_EVENT,
     QJS_SUBMIT_EVENT,
     QJS_POINTER_EVENT,
+    QJS_PROGRESS_EVENT,
     QJS_EVENT_CLASSES
 };
 
@@ -61,6 +63,7 @@ struct jsthread {
     void *win_priv;
     void *doc_priv;
 
+    struct qjs_xhr *requests; /* Borrowed registry, canceled on document retirement. */
     struct qjs_timer *timers, *timer_tail, *running_timer;
     int32_t next_timer_id;
     bool timer_ids_wrapped;
@@ -90,6 +93,9 @@ enum qjs_result qjs_run_callback(jsthread *thread, const struct qjs_callback *ca
 
 enum qjs_result qjs_run_event_listener(
     jsthread *thread, JSValueConst callback, JSValueConst target, JSValueConst event, const char *source);
+
+/* Bounded native dispatch; synchronous script callers retain pending exceptions. */
+bool qjs_dispatch_host_event(jsthread *thread, JSValueConst target, JSValueConst event, const char *source);
 
 /* No JS coercion or getters. Details are bounded and kept on one log line.
  * Call from actual host operations, including DOM mutations and invalidation. */

@@ -50,6 +50,7 @@ public:
     void invalidateBrowserWindow(); /**< Nullify m_bw before destruction */
 #ifdef WISP_QT_CAPTURE
     QJsonObject capturePaintStats() const;
+    QJsonObject captureNavigationState() const;
 #endif
 
 public slots:

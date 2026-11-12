@@ -15,7 +15,7 @@
 
 /* No box from another/inert document, or from a detached subtree, is usable.
  * Flush writes in this JS entry before asking the engine to update layout. */
-static nserror geometry_box(JSContext *ctx, dom_node *node, struct box **box)
+nserror qjs_dom_geometry_box(JSContext *ctx, dom_node *node, struct box **box)
 {
     *box = NULL;
     jsthread *thread = JS_GetContextOpaque(ctx);
@@ -40,7 +40,7 @@ static JSValue client_size(JSContext *ctx, JSValueConst object, int vertical)
     if (node == NULL)
         return JS_EXCEPTION;
     struct box *box;
-    nserror err = geometry_box(ctx, node->node, &box);
+    nserror err = qjs_dom_geometry_box(ctx, node->node, &box);
     if (err != NSERROR_OK)
         return err == NSERROR_NOMEM ? JS_ThrowOutOfMemory(ctx) : JS_ThrowInternalError(ctx, "Layout unavailable");
     if (box == NULL || (box->type == BOX_INLINE && !(box->flags & IS_REPLACED)))
@@ -80,7 +80,7 @@ static JSValue bounding_rect(JSContext *ctx, JSValueConst object, int argc, JSVa
     if (node == NULL)
         return JS_EXCEPTION;
     struct box *box;
-    nserror err = geometry_box(ctx, node->node, &box);
+    nserror err = qjs_dom_geometry_box(ctx, node->node, &box);
     if (err != NSERROR_OK)
         return err == NSERROR_NOMEM ? JS_ThrowOutOfMemory(ctx) : JS_ThrowInternalError(ctx, "Layout unavailable");
     struct box_rect bounds = {0};
@@ -143,7 +143,7 @@ static JSValue offset_get(JSContext *ctx, JSValueConst object, int property)
     if (!qjs_dom_is_html(node->node))
         return JS_ThrowTypeError(ctx, "HTMLElement receiver required");
     struct box *box;
-    nserror err = geometry_box(ctx, node->node, &box);
+    nserror err = qjs_dom_geometry_box(ctx, node->node, &box);
     if (err != NSERROR_OK)
         return err == NSERROR_NOMEM ? JS_ThrowOutOfMemory(ctx) : JS_ThrowInternalError(ctx, "Layout unavailable");
     dom_node *parent = property >= OFFSET_TOP ? offset_parent(node->node, box) : NULL;

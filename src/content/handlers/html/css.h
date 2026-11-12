@@ -108,9 +108,13 @@ struct html_computed_style {
     const css_computed_style *style;
     css_select_results *owned;
     css_computed_style *initial;
+    struct box *box;
+    bool blockify;
 };
 nserror html_computed_style_get(struct html_content *html, dom_node *node,
     css_pseudo_element pseudo, struct html_computed_style *result);
 void html_computed_style_fini(struct html_computed_style *result);
+css_error html_computed_style_value(struct html_content *html, const struct html_computed_style *style,
+    const char *name, size_t length, lwc_string **out);
 
 #endif

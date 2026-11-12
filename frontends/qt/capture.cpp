@@ -17,6 +17,8 @@
 #include <QScreen>
 #include <QTabWidget>
 #include <QWidget>
+#include <QWheelEvent>
+#include <QPointingDevice>
 
 extern "C" {
 #include "utils/nsoption.h"
@@ -48,9 +50,14 @@ static QJsonObject captureIcons(QWidget *widget)
     QJsonArray tabs;
     auto *scaffold = qobject_cast<QTabWidget *>(widget->window());
     if (scaffold) {
-        for (int i = 0; i < scaffold->count(); ++i)
-            tabs.append(QJsonObject{{"title", scaffold->tabText(i)},
-                {"icon", iconDigest(scaffold->tabIcon(i))}, {"current", i == scaffold->currentIndex()}});
+        for (int i = 0; i < scaffold->count(); ++i) {
+            auto *page = scaffold->widget(i)->findChild<NS_Widget *>();
+            QJsonObject tab = page ? page->captureNavigationState() : QJsonObject();
+            tab["title"] = scaffold->tabText(i);
+            tab["icon"] = iconDigest(scaffold->tabIcon(i));
+            tab["current"] = i == scaffold->currentIndex();
+            tabs.append(tab);
+        }
     }
     return {{"application", iconDigest(QApplication::windowIcon())},
         {"window", iconDigest(widget->window()->windowIcon())}, {"tabs", tabs}};
@@ -109,6 +116,10 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "  --capture-screen            Grab displayed pixels (requires screen capture support)\n"
                 "  --capture-id ID              Inspect an element (repeatable)\n"
                 "  --capture-click-id ID        Click an element after settling (repeatable)\n"
+                "  --capture-middle-click-id ID Middle-click an element after settling\n"
+                "  --capture-middle-click-point X,Y Middle-click viewport CSS pixels\n"
+                "  --capture-wheel-angle X,Y[,PX,PY] Send wheel rotation (eighths of a degree)\n"
+                "  --capture-wheel-pixel X,Y[,AX,AY] Send a pixel-based gesture\n"
                 "  --capture-click-label FOR    Click a label associated with this input ID\n"
                 "  --capture-click-point X,Y    Click viewport CSS pixels without auto-scrolling\n"
                 "  --capture-scroll-point X,Y,DX,DY Scroll content/frame under viewport CSS pixels\n"
@@ -233,18 +244,29 @@ int NS_Capture::prepare(int &argc, char **argv)
             }
             if (ok)
                 m_actions.append({arg, value});
-        } else if (arg == "--capture-click-id" || arg == "--capture-click-label" || arg == "--capture-type" ||
+        } else if (arg == "--capture-click-id" || arg == "--capture-middle-click-id" ||
+            arg == "--capture-click-label" || arg == "--capture-type" ||
             arg == "--capture-scroll" || arg == "--capture-scroll-element" || arg == "--capture-click-point" ||
             arg == "--capture-find" || arg == "--capture-find-back" || arg == "--capture-find-all" ||
-            arg == "--capture-find-case") {
+            arg == "--capture-find-case" || arg == "--capture-middle-click-point" ||
+            arg == "--capture-wheel-angle" || arg == "--capture-wheel-pixel") {
             m_actions.append({arg, value});
             ok = !value.isEmpty() || arg == "--capture-find";
-            if (arg == "--capture-scroll" || arg == "--capture-scroll-element" || arg == "--capture-click-point") {
+            const bool wheel = arg == "--capture-wheel-angle" || arg == "--capture-wheel-pixel";
+            if (wheel || arg == "--capture-scroll" || arg == "--capture-scroll-element" ||
+                arg == "--capture-click-point" || arg == "--capture-middle-click-point") {
                 const auto parts = value.split(',');
                 const int first = arg == "--capture-scroll-element" ? 1 : 0;
                 bool x_ok, y_ok;
                 const int x = parts.value(first).toInt(&x_ok), y = parts.value(first + 1).toInt(&y_ok);
-                ok = parts.size() == first + 2 && !parts.value(0).isEmpty() && x_ok && y_ok && x >= 0 && y >= 0;
+                ok = parts.size() == first + 2 && !parts.value(0).isEmpty() && x_ok && y_ok &&
+                    (wheel || (x >= 0 && y >= 0));
+                if (wheel && parts.size() == 4) {
+                    bool extra_x, extra_y;
+                    parts[2].toInt(&extra_x);
+                    parts[3].toInt(&extra_y);
+                    ok = x_ok && y_ok && extra_x && extra_y;
+                }
             }
         } else if (arg == "--capture-point") {
             const auto parts = value.split(',');
@@ -470,9 +492,27 @@ void NS_Capture::poll()
                 } else if (action.first == "--capture-scroll-element") {
                     const auto parts = action.second.split(',');
                     ok = nsqt_capture_scroll_element(content, parts[0], parts[1].toInt(), parts[2].toInt());
-                } else if (action.first == "--capture-click-point") {
+                } else if (action.first == "--capture-wheel-angle" || action.first == "--capture-wheel-pixel") {
                     const auto xy = action.second.split(',');
-                    nsqt_capture_click_point(m_widget, m_bw, xy[0].toInt(), xy[1].toInt());
+                    const QPoint delta(xy[0].toInt(), xy[1].toInt());
+                    const QPoint secondary(xy.value(2).toInt(), xy.value(3).toInt());
+                    const bool pixel = action.first == "--capture-wheel-pixel";
+                    // Qt propagates platform wheel input to NS_Window. A
+                    // synthetic sendEvent does not perform that propagation.
+                    auto *window = m_widget->parentWidget();
+                    const QPointF position = m_widget->mapToParent(m_widget->rect().center());
+                    // Qt Wayland can use one TouchPad-labelled seat for mouse
+                    // wheels too. Source/phase must take precedence over type.
+                    static const QPointingDevice seat("capture seat", 1, QInputDevice::DeviceType::TouchPad,
+                        QPointingDevice::PointerType::Generic, QInputDevice::Capability::Position, 1, 0);
+                    QWheelEvent event(position, window->mapToGlobal(position), pixel ? delta : secondary,
+                        pixel ? secondary : delta, Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false,
+                        pixel ? Qt::MouseEventSynthesizedBySystem : Qt::MouseEventNotSynthesized, &seat);
+                    QApplication::sendEvent(window, &event);
+                } else if (action.first == "--capture-click-point" || action.first == "--capture-middle-click-point") {
+                    const auto xy = action.second.split(',');
+                    nsqt_capture_click_point(m_widget, m_bw, xy[0].toInt(), xy[1].toInt(),
+                        action.first == "--capture-middle-click-point");
                 } else if (action.first == "--capture-scroll-point") {
                     const auto parts = action.second.split(',');
                     ok = nsqt_capture_scroll_point(
@@ -481,7 +521,8 @@ void NS_Capture::poll()
                     const auto parts = action.second.split(',');
                     nsqt_capture_drag(m_bw, parts[0].toInt(), parts[1].toInt(), parts[2].toInt(), parts[3].toInt());
                 } else {
-                    ok = nsqt_capture_click(m_widget, m_bw, action.second, action.first == "--capture-click-label");
+                    ok = nsqt_capture_click(m_widget, m_bw, action.second, action.first == "--capture-click-label",
+                        action.first == "--capture-middle-click-id");
                 }
             }
             m_last_action_ms = action_timer.nsecsElapsed() / 1e6;
@@ -695,6 +736,7 @@ void NS_Capture::finish(const QString &result)
         {"fonts", fonts},
         {"qt_version", qVersion()},
         {"qt_platform", QGuiApplication::platformName()},
+        {"wheel_scroll_lines", QApplication::wheelScrollLines()},
         {"artifacts", artifacts},
         {"restyle_state",
             m_fail_retained_layout ? nsqt_capture_restyle_lifecycle(m_failure_watch, false) : QJsonObject()},

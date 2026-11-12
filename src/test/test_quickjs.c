@@ -1674,6 +1674,8 @@ END_TEST
 #include "test_quickjs_style.inc"
 #include "test_quickjs_clone.inc"
 #include "test_quickjs_lazy_images.inc"
+#include "test_quickjs_image_factory.inc"
+#include "test_quickjs_xhr.inc"
 #include "test_quickjs_view_events.inc"
 
 START_TEST(test_quickjs_dom_conversion_retirement)
@@ -3544,10 +3546,10 @@ END_TEST
 
 /* Every constructor must check retirement after both IDL conversion and the
  * new-target prototype lookup, including base Event and CustomEvent. */
-enum { EVENT_CONVERSION_STAGES = 3, EVENT_CONSTRUCTOR_KINDS = 6 };
+enum { EVENT_CONVERSION_STAGES = 3, EVENT_CONSTRUCTOR_KINDS = 7 };
 START_TEST(test_quickjs_event_constructor_retirement)
 {
-    static const char *names[] = {"Event", "CustomEvent", "UIEvent", "MouseEvent", "SubmitEvent", "PointerEvent"};
+    static const char *names[] = {"Event", "CustomEvent", "UIEvent", "MouseEvent", "SubmitEvent", "PointerEvent", "ProgressEvent"};
     static const char *calls[] = {
         "new C({toString(){retireEvents();return 'x';}})",
         "new C('x',{get bubbles(){retireEvents();return true;}})",
@@ -3869,73 +3871,6 @@ START_TEST(test_quickjs_event_foreign_retirement)
 }
 END_TEST
 
-/**
- * Test XMLHttpRequest.
- */
-START_TEST(test_quickjs_xhr)
-{
-    jsheap *heap = NULL;
-    jsthread *thread = NULL;
-    nserror err;
-
-    js_initialise();
-
-    err = js_newheap(5, &heap);
-    ck_assert_int_eq(err, NSERROR_OK);
-
-    err = js_newthread(heap, NULL, NULL, &thread);
-    ck_assert_int_eq(err, NSERROR_OK);
-
-    /* Test XMLHttpRequest constructor exists */
-    const char *code1 = "typeof XMLHttpRequest === 'function'";
-    assert_predicate(thread, code1, "test_xhr_ctor");
-
-    /* Test creating XHR instance - just check it's an object */
-    const char *code2 = "typeof (new XMLHttpRequest()) === 'object'";
-    assert_predicate(thread, code2, "test_xhr_instance");
-
-    /* Test open method */
-    const char *code3 = "(() => { var xhr = new XMLHttpRequest(); xhr.open('GET', '/test'); "
-                        "return xhr.readyState === 1; })()";
-    assert_predicate(thread, code3, "test_xhr_open");
-
-    /* Test DONE constant */
-    const char *code4 = "XMLHttpRequest.DONE === 4";
-    assert_predicate(thread, code4, "test_xhr_const");
-
-    js_closethread(thread);
-    js_destroythread(thread);
-    js_destroyheap(heap);
-    js_finalise();
-}
-END_TEST
-
-START_TEST(test_quickjs_xhr_conversion_exception)
-{
-    jsheap *heap = NULL;
-    jsthread *thread = NULL;
-    const char *code = "var xhr = new XMLHttpRequest();"
-                       "var sentinel = new Error('conversion failed');"
-                       "var invalid = { toString: function() { throw sentinel; } };"
-                       "xhr.open('GET', '/before');"
-                       "for (var args of [[invalid, '/test'], ['GET', invalid]]) {"
-                       "  var caught = null;"
-                       "  try { xhr.open(args[0], args[1]); } catch (e) { caught = e; }"
-                       "  if (caught !== sentinel) throw new Error('conversion exception lost');"
-                       "  if (xhr.readyState !== 1) throw new Error('request changed after exception');"
-                       "}"
-                       "xhr.open('POST', '/after');";
-
-    js_initialise();
-    ck_assert_int_eq(js_newheap(5, &heap), NSERROR_OK);
-    ck_assert_int_eq(js_newthread(heap, NULL, NULL, &thread), NSERROR_OK);
-    ck_assert(js_exec(thread, (const uint8_t *)code, strlen(code), "xhr conversion"));
-    js_destroythread(thread);
-    js_destroyheap(heap);
-    js_finalise();
-}
-END_TEST
-
 START_TEST(test_quickjs_predicate_helper)
 {
     jsheap *heap;
@@ -4210,6 +4145,8 @@ Suite *quickjs_suite(void)
     add_style_tests(tc_dom);
     add_clone_tests(tc_dom);
     add_lazy_image_tests(tc_dom);
+    add_image_factory_tests(tc_dom);
+    add_xhr_tests(tc_dom);
     add_view_event_tests(tc_dom);
     tcase_add_test(tc_dom, test_quickjs_dom_attributes);
     tcase_add_test(tc_dom, test_quickjs_dom_text);
@@ -4325,8 +4262,6 @@ Suite *quickjs_suite(void)
     suite_add_tcase(s, tc_dom);
     tcase_add_test(tc_surface, test_quickjs_storage);
     tcase_add_test(tc_surface, test_quickjs_event_target);
-    tcase_add_test(tc_surface, test_quickjs_xhr);
-    tcase_add_test(tc_surface, test_quickjs_xhr_conversion_exception);
     suite_add_tcase(s, tc_surface);
 
     tc_limits = tcase_create("Execution limits and recovery");

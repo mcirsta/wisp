@@ -39,6 +39,7 @@ JSValue qjs_event_allocate(JSContext *ctx, JSValue object, enum qjs_event_kind k
 JSValue qjs_document_create_event(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv);
 /* Host-created trusted base Event, with false bubbles/cancelable/composed. */
 JSValue qjs_event_create(JSContext *ctx, const char *type);
+JSValue qjs_progress_event_create(JSContext *ctx, const char *type, double loaded, double total);
 /* Host-created trusted submit event; retains the submitter wrapper. */
 JSValue qjs_native_submit_event(JSContext *ctx, dom_string *type, JSValueConst document, dom_node *submitter);
 JSValue qjs_event_current_target(JSContext *ctx, struct qjs_event *event);

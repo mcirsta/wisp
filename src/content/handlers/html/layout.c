@@ -6832,7 +6832,7 @@ layout_position_absolute(struct box *box, struct box *containing_block, int cx, 
  * \param  x	Receives relative offset in x.
  * \param  y	Receives relative offset in y.
  */
-static void layout_compute_relative_offset(const css_unit_ctx *unit_len_ctx, struct box *box, int *x, int *y)
+void layout_compute_relative_offset(const css_unit_ctx *unit_len_ctx, struct box *box, int *x, int *y)
 {
     int left, right, top, bottom;
     struct box *containing_block;

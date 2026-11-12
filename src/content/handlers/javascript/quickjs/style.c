@@ -205,7 +205,7 @@ static JSValue computed_value(JSContext *ctx, struct style_object *style, struct
     if (error != NSERROR_OK)
         return error == NSERROR_NOMEM ? JS_ThrowOutOfMemory(ctx) : JS_ThrowInternalError(ctx, "Style unavailable");
     lwc_string *text = NULL;
-    css_error css_error = native.style != NULL ? css_computed_property_value(native.style, name, length, &text)
+    css_error css_error = native.style != NULL ? html_computed_style_value(html, &native, name, length, &text)
                                               : CSS_INVALID;
     html_computed_style_fini(&native);
     /* An unimplemented family is an explicit limitation, never an empty value

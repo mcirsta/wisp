@@ -144,7 +144,9 @@ nserror html_script_exec(html_content *html, bool allow_defer)
             if (!html->aborted && html->parser != NULL) {
                 /* Unpause consumes buffered HTML and may pause at the next
                  * script. Never keep a pointer into the reallocatable array. */
+                html->parser_active = true;
                 dom_hubbub_error err = dom_hubbub_parser_pause(html->parser, false);
+                html->parser_active = false;
                 if (err != DOM_HUBBUB_OK && err != DOM_HUBBUB_HUBBUB_ERR_PAUSED) {
                     html->scripts_running = false;
                     return libdom_hubbub_error_to_nserror(err);

@@ -50,26 +50,27 @@ Recommended order:
    `Document.defaultView` returns the page's existing Window identity, or null
    for cloned/inert documents without a browsing context. This is standard
    browser behavior; the temporary diagnostic JS implementation is not shipped.
-2. **Resolved box/style measurements.** The gallery reads padding, margins,
-   borders, dimensions and position. Before the foundation change, jQuery's CSS
-   reads silently returned undefined; a 92px content-width test with 2px padding
-   and 1px borders reported width 98px because edge measurements were missing.
-   With `defaultView`, jQuery now reaches native computed-style reads; the first
-   main-bundle blocker is `position` in jQuery UI's offset feature probe.
-   `padding-left` and `display` are also confirmed unsupported reads.
-   The previous image batch deliberately implemented only the resolved values
-   needed by lazySizes. Extend the native CSSOM surface with a bounded set of
-   correctly resolved values, including display/position and box measurements.
-3. **Image construction and event-handler properties.** Fancybox's image path
-   uses `new Image()`, `onload`/`onerror` and width/height. The constructor and
-   handler properties are absent. Reuse the element-owned request/completion
-   machinery from the completed image batch instead of adding a separate loader.
-4. **Actual asynchronous requests, as a separate batch.** The site's gallery
-   links fetch `/ebh/display_gallery/...` through Fancybox AJAX; other widgets
-   also use requests. The old XHR stub still reports status 200 without making
-   a request or delivering callbacks. Complete gallery loading therefore needs
-   real request integration, including origin, cancellation and lifetime rules.
-   The first three groups alone do not promise a working full gallery.
+2. **Resolved box/style measurements — implemented for the measured group.**
+   The native CSSOM now exposes display/position, box sizing, direction/float,
+   physical width/height, margins, padding, border widths/styles and insets.
+   The site's unmodified jQuery/UI bundle initializes, reports the test's 92px
+   content width correctly, and registers/runs `gallery_ebh`. The live homepage
+   now contains the script-created image and caption in `#foto_container`.
+   Broader computed-value serialization is still incomplete; see the bounded
+   coverage and remaining limitations below.
+3. **Image construction and image event-handler properties — implemented.**
+   `new Image()`, width/height and image `onload`/`onerror` use the existing native
+   element requests and event dispatcher. The actual bundle's Fancybox image
+   path now loads and displays a 400×300 test image through its normal `open()`
+   operation. This is distinct from its AJAX gallery path in the next item.
+4. **Actual asynchronous requests — implemented for same-origin GET/text.**
+   The fake DONE/200 XHR has been replaced by real native fetches, headers/status,
+   asynchronous events, redirects with origin checks, cancellation and retirement.
+   The unmodified Fancybox AJAX path now retrieves a captured response from
+   `/ebh/display_gallery/205780` and displays all 12 thumbnails using the real
+   site stylesheet and CDN images. This is a reduced replay, not proof that every
+   live-homepage click path works. CORS, uploads and other response types remain
+   separate; see the exact scope below.
 
 Lower priority: Cloudflare's email-decoding script reaches a cleanup expression
 using `document.currentScript` or `document.scripts`, which are absent. That
@@ -82,8 +83,8 @@ The standards anchors are [DOM containment](https://dom.spec.whatwg.org/#dom-nod
 [CSSOM resolved values](https://drafts.csswg.org/cssom/#resolved-values), and
 [Image construction](https://html.spec.whatwg.org/multipage/embedded-content.html#dom-image).
 These findings refine the earlier cloneNode follow-up below: geometry,
-containment and defaultView are now available; the broader resolved-style
-surface remains the next step.
+containment, defaultView, the measured resolved-style group and Image are now
+available. The measured same-origin gallery request path is now implemented too.
 
 The containment implementation reuses libdom's allocation-free parent walk,
 including detached trees and adopted nodes. Its native helper now accepts null
@@ -108,6 +109,191 @@ ASan/UBSan/LSan; the allocation-failure sweep needed `CK_TIMEOUT_MULTIPLIER=3`
 to avoid its 15-second test-harness timeout. Browser execution limits are
 unchanged. Qt uses `detect_leaks=0` for the existing platform-allocation policy.
 
+### Resolved box values follow-up (2026-10-15)
+
+LibCSS keeps property lookup, shorthand expansion and serialization; the HTML
+layer supplies used values from synchronized layout when CSSOM requires them.
+The QuickJS wrapper only forwards the read. Hidden/ungenerated content and
+properties that do not apply retain computed values, including percentages and
+`auto`. Content-box and border-box sizes differ correctly; scrollbar reservation
+and table-cell alignment space are not exposed as CSS padding. Generated boxes
+retain their originating element and pseudo identity in existing fields, so
+shared styles and flattened inline owners cannot confuse `::before`/`::after`.
+Repeated unchanged reads reuse layout and need no new option or cache.
+
+The inset work also removed 149 lines of obsolete libcss getter fixups. Those
+getters mixed computed values with relative-position used values and recovered
+units from `get_*_bits()`, although generated getters return only type bits there.
+That could interpret percentages as pixels and a calc union as a numeric value.
+The four public getters are now generated from `properties.toml` and preserve
+computed values. Relative positioning shares the existing layout solver; absolute
+and fixed reads use their established containing block. Over-constrained insets
+keep their computed value as required by CSSOM. The standards anchors are
+[CSSOM resolved values](https://drafts.csswg.org/cssom/#resolved-values) and
+[CSS Position 3 inset values](https://www.w3.org/TR/css-position-3/#insets).
+The historical Duktape Window/CSS bindings were checked; they offered no computed
+style implementation to reuse for this group.
+
+Coverage includes parser-time and post-load reads, mutations through existing
+wrappers, percentage/auto sizing, fractional computed lengths, higher-DPI CSS-pixel
+serialization, calc lengths, shorthand compression, inline/table applicability,
+root/flex/grid/float blockification, generated content, relative/absolute/fixed
+and sticky offsets, and scrollbar/table-cell adjustments. Live evidence is in
+`out/js-ebihoreanul/box-style-live-home/`; the unmodified local bundle's evidence
+is in `box-style-native-final/` and `box-style-unmodified-probe/` under the same
+parent. The local probe reports `WIDTH:92` and `GALLERY:returned`, and creates
+an actual preview image. The live capture completes loading and visibly shows
+that preview. This does not claim that Fancybox's AJAX dialogs work.
+
+Remaining limits of this group: logical-property serializers and the wider CSS
+property surface are separate; percentage-bearing computed math expressions
+without a layout value still report `NotSupportedError`, as do unsupported
+positioned-inline containing-block/sticky geometries. Rendered lengths retain the
+engine's integer-layout precision. These limits are explicit, rather than empty
+or invented successful values. The Image and asynchronous-request follow-ups
+below complete the remaining measured prerequisites.
+
+The broader construction regression also needed its test document's content-user
+viewport recipient initialized for responsive image selection. Its whitespace-only
+`src` expectation now follows [HTML image source selection](https://html.spec.whatwg.org/multipage/images.html#updating-the-image-data):
+a nonempty attribute is selected and URL-parsed, so it can resolve to the document
+URL and fail later during decoding. It is not identical to a missing/empty source.
+The pure source-selection test now covers that distinction too.
+
+Validation: all 237 native QuickJS checks pass in Release and sanitizer Debug;
+the layout/CSS suites and property-generator test pass. The expanded
+`layout_calc_test` has 198 Debug checks, including 25 new computed-value/inset
+cases, and passes with ASan/UBSan/LSan. Qt computed-style, computed-box, geometry,
+clone, lazy-image, positioned-pseudo, generated-box and generated-search captures
+pass in both builds. Construction-context and image-source tests pass after the
+fixture corrections above. Native QuickJS uses the existing test timeout
+multiplier; Qt and the broader construction sweep use the existing sanitizer
+platform-allocation policy (`detect_leaks=0`).
+
+### Image factory and image handlers follow-up (2026-10-15)
+
+`new Image(width?, height?)` creates a native HTML image in the current document,
+including when disconnected. It shares the existing HTMLImageElement prototype,
+request records, source selection, cache, completion tasks and document retirement.
+There is no second loader, renderer flag or site-specific JS implementation.
+Optional-argument conversion, constructor inheritance and prototype fallback follow
+[Web IDL legacy factory functions](https://webidl.spec.whatwg.org/#LegacyFactoryFunction).
+The factory sets dimension attributes directly; dimension property writes follow
+HTML's unsigned-long ReflectSetter range rule. JS writes remain in the DOM trace.
+
+Width/height reads use the synchronized rendered content box in CSS pixels.
+Detached, hidden and inert images instead use valid dimension attributes and then
+natural, density-corrected sizes, independently for each axis. Padding, borders,
+transforms and object-fit do not become the reported image content size. This follows
+[HTML dimension attributes](https://html.spec.whatwg.org/multipage/embedded-content-other.html#dimension-attributes).
+The historical Duktape HTMLImageElement/HTMLElement bindings were reviewed; their
+attribute accessor declarations do not supply these rendered/request semantics.
+The old libdom unsigned-attribute getter uses base-detecting `strtoul` and is not
+suitable for this algorithm; the native HTML dimension helper uses decimal-prefix
+parsing with HTML whitespace and sign rules, without changing unrelated accessors.
+
+Image `onload`/`onerror` reuse Window scroll/resize handlers' storage and native
+EventTarget registrations. Replacement preserves listener position, clearing
+removes it, and reactivation gets a new position. Handler identity, `this`, boolean
+false cancellation, exceptions, GC tracing and retirement use the common dispatcher.
+This batch exposes the two IDL properties on images; the wider GlobalEventHandlers
+surface and compilation/synchronization of inline HTML handler attributes remain
+separate. It does not add Window's special script-error reporting API.
+
+The unmodified current eBihoreanul bundle was exercised through `$.fancybox.open()`
+with a local image, without replacing its functions or browser APIs. It returned,
+loaded through `imgPreload`, obtained 400×300 dimensions, cleared its handlers and
+advanced from `coming` to `current`. The capture visibly contains the image at that
+size. Evidence: `out/js-ebihoreanul/image-fancybox-first/` and its
+`probes/image-fancybox.html` input. This proves the image branch; live gallery links
+using `/ebh/display_gallery/...` are covered by the subsequent XHR batch below.
+
+Regression coverage adds factory/IDL conversion, inheritance, dimension parsing,
+handler order/cancellation/GC/adoption, retirement during conversion and dispatch,
+and an allocation-failure/recovery sweep. The Qt HTTP image suite now covers a
+factory-created detached request, density correction, handler completion and error,
+insertion/removal/display changes, content versus border sizing, no duplicated
+loads and Window completion, with pixels compared to static markup.
+
+Validation: all 246 native QuickJS checks pass in Release and Debug with
+ASan/UBSan/LSan, including the new allocation-failure sweep. Qt image, lazy-image,
+geometry, view-event, clone and computed-box suites pass in both builds. Qt uses
+`detect_leaks=0` for the existing platform-allocation policy. `git diff --check`
+is clean. No new build or runtime switch is required.
+
+### Asynchronous XHR follow-up (2026-10-15)
+
+The old fake-success object is replaced by a native request owner and the existing
+asynchronous fetch/scheduler machinery. All engine and DOM work stays on the main
+thread. The historical Duktape tree has no XHR implementation to transplant;
+`EventTarget.bnd` was reviewed for context, and the modern common native dispatcher
+is reused, including handler ordering, exception reporting, execution budgets,
+microtask checkpoints and JS mutation attribution.
+
+Implemented scope: asynchronous same-origin HTTP(S) GET, default/text responses,
+real status/reason/final URL and filtered response headers, validated/combined
+request headers, `overrideMimeType`, timeout updates, abort and reuse. Native
+ProgressEvent values carry download progress; ready-state events remain base
+Events. Headers are published before the first body byte, and 304/401/404/500 are
+ordinary HTTP responses rather than invented success or network-error statuses.
+Redirects are authorized before each hop; cross-origin destinations are never
+requested, even through redirects. Native HTTP cookies continue to apply within
+the origin; script cannot forge Cookie/Host/security headers or read Set-Cookie.
+This follows the [XHR algorithms](https://xhr.spec.whatwg.org/) and
+[Web IDL attribute/conversion rules](https://webidl.spec.whatwg.org/#es-attributes).
+
+Fetch callbacks only update bounded native buffers and schedule delivery. Pending
+requests root their objects; generations suppress obsolete callbacks after open,
+abort, reentrant listeners or navigation. Closing a document cancels its fetches,
+timeouts and queued delivery before clearing listeners. XHR does not join the
+HTML active-resource count or delay Window load. `xhr.open`, `xhr.send` and
+`xhr.dispatch` trace entries identify request work; callback DOM edits use the
+existing JS-origin trace. Headers are capped at 64 KiB and bodies at 16 MiB;
+exceeding a limit fails rather than silently truncating a successful response.
+Unchanged responseText reads reuse the decoded string.
+
+The fetch layer now has an explicit raw-HTTP GET entry point: it preserves 304/401
+responses instead of applying the resource-cache/authentication callback policy.
+Ordinary resource callers retain their existing policy. Testing also found a
+pre-existing null-body inconsistency in curl setup; absent GET bodies are now
+normalized once to an owned NONE descriptor, so later code cannot dereference NULL.
+
+Deliberate limits: synchronous XHR, POST/HEAD/other methods, uploads, explicit URL
+credentials, cross-origin credentials/CORS, binary/JSON/document response modes
+and responseXML are not implemented. Unsupported request/response modes fail
+explicitly; unknown responseType enum strings are ignored as Web IDL specifies.
+Requests currently use the fetcher directly rather than the resource cache.
+Text decoding handles UTF BOMs, UTF-8/UTF-16 malformed prefixes and common legacy
+charsets through the existing platform iconv backend; complete Encoding Standard
+label/legacy-codec behavior and HTML/XML encoding sniffing remain separate work.
+This is useful text XHR, not a claim of full XHR/Fetch/Encoding conformance.
+
+The real site probe uses the unmodified `scripts.min_v202610152.js`, the captured
+public gallery HTML, the site's stylesheet and live CDN thumbnails. Fancybox
+finishes with `current=true`, `coming=false`, HTTP 200 and 12/12 loaded images;
+the capture shows the gallery grid. Evidence:
+`out/js-ebihoreanul/ajax-fancybox-styled/`, input `probes/ajax-fancybox.html`,
+and `source/gallery.html` under the same evidence directory. No site functions
+or browser APIs are replaced. A full live gallery interaction sweep remains a
+separate verification step; unrelated advertising/consent scripts stay outside it.
+
+Regression coverage includes HTTP errors and redirects, a server-side handshake
+that requires HEADERS_RECEIVED before sending the body, streaming UTF-8 and BOMs,
+malformed text, header filtering, abort/timeout/reopen, reentrancy and navigation.
+Native tests cover receiver/conversion rules, retirement during conversions,
+ProgressEvent inheritance, handler identity, unreachable cycles, scheduler failure
+and callback execution limits. The old XHR stub-surface tests were removed.
+
+Validation: all 263 native QuickJS checks pass in Release and Debug with
+ASan/UBSan/LSan. The 19 native fetcher-queue checks and Release Qt XHR, image,
+lazy-image and computed-box suites pass. Debug additionally passes the timer,
+click and submit suites (seven Qt suites total); those three older tests assert
+log output and cannot pass with this Release configuration's compiled-out logging.
+Qt retains its existing `detect_leaks=0` platform policy. The focused XHR HTTP
+suite also covers preserving the server charset when a MIME override omits it.
+There is no new build/runtime switch or development-only implementation path.
+
+
 ## Current priority: basic JS that makes sites readable (2026-10-11)
 
 The user's priority is scripts that initialize pages and populate visible content.
@@ -122,7 +308,7 @@ Next, use saved/live reading sites to identify their first unsupported DOM opera
 style/HTML operations according to those failures. Confirm the needed behavior
 against standards and use focused fixtures plus visible full-page checks.
 Content-fetching APIs become a priority when a page needs them to populate the
-article or navigation; avoid fabricated success from the existing XHR stub.
+article or navigation; the same-origin XHR batch below replaces its fabricated success.
 Keep execution limits, callback lifetime safety and JS-attributed mutation logs.
 
 This priority overrides the earlier batch ordering below. It does not imply all
@@ -3248,11 +3434,11 @@ unless stated otherwise.
 | Timers | `timers.c`: per-document ordered queue on the frontend scheduler, callback arguments/string handlers, shared cancellation IDs and nesting delays | Real `setTimeout`/`setInterval`; callbacks and their checkpoints share execution limits; document retirement cancels them |
 | JS diagnostics | Optional `js_trace` records document/entry IDs, script sources, timer causality, navigation, exposed node IDs, actual DOM operations and coalesced render requests | Separates supported JS host effects from static processing; this is not complete paint attribution |
 | Document/nodes | `dom.c`/`document.c`/`tree.c`/`collections.c`: real libdom wrappers with stable identity, roots, ID lookup, traversal, live `childNodes`/`children`, tag/namespace queries and element/text/comment/fragment factories | Realm-lifetime wrapper ownership, cloned Documents and native reference cleanup are tested; selectors, class-name queries, document convenience collections, namespace-aware creation, importNode/adoptNode and cross-realm operations are not exposed; cloneNode and insertion adoption within this realm are supported |
-| Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, text/data, `innerHTML`, live `style`, cloneNode and append/insert/replace/remove; connected edits request a full restyle after the entry/checkpoint | Changes affect boxes and pixels, including moves into detached trees; computed styles/geometry remain absent; dynamic stylesheet lifecycle remains incomplete |
-| Events | Event/CustomEvent/UIEvent/core MouseEvent/PointerEvent/SubmitEvent values; shared script/native primary-click and SubmitEvent dispatch; checkable input/change delivery | Keyboard, other pointer/mouse events, full form submission callbacks and handler attributes remain pending |
+| Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, text/data, `innerHTML`, live `style`, cloneNode and append/insert/replace/remove; connected edits request a full restyle after the entry/checkpoint | Changes affect boxes and pixels, including moves into detached trees; bounded resolved box styles and geometry are implemented as described above; dynamic stylesheet lifecycle remains incomplete |
+| Events | Event/CustomEvent/UIEvent/core MouseEvent/PointerEvent/SubmitEvent/ProgressEvent values; shared script/native primary-click and SubmitEvent dispatch; checkable input/change delivery | Keyboard, other pointer/mouse events, full form submission callbacks and handler attributes remain pending |
 | Cancellation | `abort.c`: AbortController, AbortSignal state/reason, throwIfAborted, static abort, onabort and the listener signal option | Listener cancellation uses private abort steps before the public event; timeout, any and network integration remain absent |
 | Lifecycle information | `readyState`, trusted `readystatechange`, `DOMContentLoaded` and Window `load`; frame/resource waits and DOM update integration | Handler properties/attributes, pageshow/pagehide, navigation timing and a complete document-abort lifecycle remain pending |
-| Networking/storage | XHR fabricates DONE/200 without a request; storage discards writes; no `document.cookie` accessor or browser fetch binding | XHR/storage still advertise unsupported behavior. Native HTTP cookie handling is a separate subsystem |
+| Networking/storage | Real asynchronous same-origin HTTP(S) GET/text XHR; storage still discards writes; no `document.cookie` accessor or browser fetch binding | XHR uses native fetch/cookies, rejects unsupported modes and blocks cross-origin hops. See the bounded 2026-10-15 scope above; storage remains incomplete |
 | Navigation | `location.c`: real URL getters and relative/absolute navigation for assign/replace | Partial support: href has no setter, reload is a stub, history replacement needs review; assign and replace currently use the same flags |
 | Navigator | Hard-coded Windows Chrome 91 UA, English language and cookies-enabled value | JS identity differs from Wisp's actual HTTP UA and capabilities |
 | Generated bindings | `utils/qjs_binding_generator.py` generates Console and a generic Window stub | Not a complete WebIDL binding generator; see below |
@@ -3291,8 +3477,8 @@ unless stated otherwise.
    still need separate review; this is not complete HTML mutation processing.
 
 5. **Advertised capabilities and tests need to become truthful.** The initial
-   probe saw no timer/Promise callbacks; both now run. XHR still reports 200
-   without fetching anything.
+   probe saw no timer/Promise callbacks; both now run. Its fake XHR 200 response
+   has also been replaced by the bounded real-request batch above.
    Replace placeholders as each capability is implemented; for deferred APIs,
    decide deliberately whether to omit them or expose a specified unsupported
    behavior. Do not keep fabricated success as a compatibility strategy.

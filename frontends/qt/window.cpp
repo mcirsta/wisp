@@ -22,6 +22,9 @@
  */
 
 #include <QGridLayout>
+#include <QApplication>
+#include <QLoggingCategory>
+#include <QPointingDevice>
 
 extern "C" {
 
@@ -54,6 +57,22 @@ struct gui_window {
     class NS_Window *window;
 };
 
+Q_LOGGING_CATEGORY(lcWispWheel, "wisp.input.wheel", QtWarningMsg)
+
+/* Expose native wheel handling to the content window without redispatching
+ * input through QWidget's event propagation. */
+class NS_ScrollBar : public QScrollBar
+{
+public:
+    explicit NS_ScrollBar(Qt::Orientation orientation) : QScrollBar(orientation)
+    {
+        // Logical pixels per line/arrow step: the usual three-line system
+        // setting gives 120 pixels per notch, independent of window size/DPR.
+        setSingleStep(40);
+    }
+    using QScrollBar::wheelEvent;
+};
+
 
 /**
  * netsurf window class constructor
@@ -73,7 +92,7 @@ NS_Window::NS_Window(QWidget *parent, struct browser_window *bw)
     m_nswidget = new NS_Widget(this, m_actions, bw);
 
     // horizontal scrollbar
-    m_hscrollbar = new QScrollBar(Qt::Horizontal);
+    m_hscrollbar = new NS_ScrollBar(Qt::Horizontal);
     m_hscrollbar->setMinimum(0);
     m_hscrollbar->setMaximum(1);
     m_hscrollbar->setPageStep(1);
@@ -81,7 +100,7 @@ NS_Window::NS_Window(QWidget *parent, struct browser_window *bw)
     connect(m_hscrollbar, &QScrollBar::valueChanged, m_nswidget, &NS_Widget::setHorizontalScroll);
 
     // vertical scrollbar
-    m_vscrollbar = new QScrollBar(Qt::Vertical);
+    m_vscrollbar = new NS_ScrollBar(Qt::Vertical);
     m_vscrollbar->setMinimum(0);
     m_vscrollbar->setMaximum(1);
     m_vscrollbar->setPageStep(1);
@@ -117,25 +136,32 @@ void NS_Window::closeEvent(QCloseEvent *event)
 
 void NS_Window::wheelEvent(QWheelEvent *event)
 {
-    QPoint pixels = event->pixelDelta();
+    const QPoint before(m_hscrollbar->value(), m_vscrollbar->value());
+    /* Wayland supplies pixel deltas even for a wheel (commonly 10 per notch).
+     * Those are not touchpad travel: use the angle and system line setting.
+     * Use per-event source/phase: Wayland's shared seat can be labelled
+     * TouchPad even when this particular event came from a mouse wheel.
+     * Gesture pixels are already logical pixels; do not apply DPR again.
+     * X11 pixel deltas are driver-specific and unreliable for either device. */
+    const bool wheel = event->source() == Qt::MouseEventNotSynthesized && event->phase() == Qt::NoScrollPhase &&
+        !event->angleDelta().isNull();
+    const QPoint pixels = wheel || QGuiApplication::platformName() == "xcb" ? QPoint() : event->pixelDelta();
     if (!pixels.isNull()) {
-        m_hscrollbar->setValue(m_hscrollbar->value() + pixels.x());
+        m_hscrollbar->setValue(m_hscrollbar->value() - pixels.x());
         m_vscrollbar->setValue(m_vscrollbar->value() - pixels.y());
     } else {
-        QPoint angle = event->angleDelta() / 8;
-        if (!angle.isNull()) {
-            if (angle.x() >= 15) {
-                m_hscrollbar->triggerAction(QAbstractSlider::SliderSingleStepAdd);
-            } else if (angle.x() <= -15) {
-                m_hscrollbar->triggerAction(QAbstractSlider::SliderSingleStepSub);
-            }
-            if (angle.y() >= 15) {
-                m_vscrollbar->triggerAction(QAbstractSlider::SliderSingleStepSub);
-            } else if (angle.y() <= -15) {
-                m_vscrollbar->triggerAction(QAbstractSlider::SliderSingleStepAdd);
-            }
-        }
+        /* Qt honors wheelScrollLines, multiple notches and fractional steps.
+         * Use the dominant axis, as QAbstractScrollArea does. */
+        const QPoint angle = event->angleDelta();
+        auto *scrollbar = qAbs(angle.x()) > qAbs(angle.y()) ? m_hscrollbar : m_vscrollbar;
+        scrollbar->wheelEvent(event);
     }
+    qCDebug(lcWispWheel) << "platform" << QGuiApplication::platformName() << "dpr" << devicePixelRatioF()
+        << "angle" << event->angleDelta() << "pixels" << event->pixelDelta()
+        << "source" << event->source() << "phase" << event->phase() << "device" << event->pointingDevice()->type()
+        << "wheel" << wheel << "lines" << QApplication::wheelScrollLines()
+        << "step" << QPoint(m_hscrollbar->singleStep(), m_vscrollbar->singleStep())
+        << "before" << before << "after" << QPoint(m_hscrollbar->value(), m_vscrollbar->value());
     event->accept();
 }
 
@@ -223,14 +249,12 @@ nserror NS_Window::update_extent()
     int max_h = std::max(ew - width, m_hscrollbar->minimum());
     m_hscrollbar->setMaximum(max_h);
     m_hscrollbar->setPageStep(width);
-    m_hscrollbar->setSingleStep(width / 16);
     m_hscrollbar->setVisible(max_h > 0);
 
     int height = m_nswidget->size().height();
     int max_v = std::max(eh - height, m_vscrollbar->minimum());
     m_vscrollbar->setMaximum(max_v);
     m_vscrollbar->setPageStep(height);
-    m_vscrollbar->setSingleStep(height / 16);
     m_vscrollbar->setVisible(max_v > 0);
 
     return NSERROR_OK;

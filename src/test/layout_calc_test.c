@@ -1619,10 +1619,87 @@ START_TEST(test_background_many_layers)
 }
 END_TEST
 
+/* Computed inset getters must retain auto/percentages. Layout, which knows
+ * the containing block and direction, resolves opposing insets exactly once. */
+START_TEST(test_computed_insets_preserve_values)
+{
+    const char *positions[] = {"static", "relative", "absolute", "fixed", "sticky"};
+    char css[160];
+    snprintf(css, sizeof(css), "* { position:%s; left:10%%; right:auto; top:2px; bottom:3px }", positions[_i]);
+    select_ctx selected;
+    const css_computed_style *style = select_style_from_css(css, &selected);
+    css_fixed_or_calc length;
+    css_unit unit;
+    ck_assert_int_eq(css_computed_left(style, &length, &unit), CSS_LEFT_SET);
+    ck_assert_int_eq(unit, CSS_UNIT_PCT);
+    ck_assert_int_eq(length.value, INTTOFIX(10));
+    ck_assert_int_eq(css_computed_right(style, &length, &unit), CSS_RIGHT_AUTO);
+    ck_assert_int_eq(css_computed_bottom(style, &length, &unit), CSS_BOTTOM_SET);
+    ck_assert_int_eq(unit, CSS_UNIT_PX);
+    ck_assert_int_eq(length.value, INTTOFIX(3));
+    destroy_select_ctx(&selected);
+}
+END_TEST
+
+static const struct {
+    const char *declarations, *name, *expected;
+} computed_value_cases[] = {
+    {"opacity:.25", "OPACITY", "0.25"},
+    {"display:inline-flex", "display", "inline-flex"},
+    {"display:inline-flex;float:left", "display", "flex"},
+    {"position:sticky", "position", "sticky"},
+    {"box-sizing:border-box", "box-sizing", "border-box"},
+    {"width:50%", "width", "50%"},
+    {"width:auto", "width", "auto"},
+    {"width:min-content", "width", "min-content"},
+    {"width:calc(10px + 2.5px)", "width", "12.5px"},
+    {"height:1in", "height", "96px"},
+    {"margin:1px 2px 1px 2px", "margin", "1px 2px"},
+    {"padding:1px 2px 3px", "padding", "1px 2px 3px"},
+    {"border:2.5px solid", "border-width", "2.5px"},
+    {"border:2.5px hidden", "border-width", "0px"},
+    {"border-style:solid dashed dotted double", "border-style", "solid dashed dotted double"},
+    {"position:static;top:25%", "top", "25%"},
+    {"position:relative;right:auto;left:10%", "right", "auto"},
+    {"", "not-a-property", ""},
+    {"width:calc(10px + 25%)", "width", NULL},
+    {"color:red", "color", NULL},
+};
+
+START_TEST(test_computed_value_serialization)
+{
+    char css[256];
+    snprintf(css, sizeof(css), "* { %s }", computed_value_cases[_i].declarations);
+    select_ctx selected;
+    const css_computed_style *style = select_style_from_css(css, &selected);
+    css_unit_ctx units = unit_ctx;
+    /* Computed lengths are CSS px even on a higher-DPI output device. */
+    units.device_dpi = INTTOFIX(144);
+    struct css_computed_value_ctx context = {.units = &units};
+    lwc_string *text = NULL;
+    const char *name = computed_value_cases[_i].name, *expected = computed_value_cases[_i].expected;
+    css_error error = css_computed_property_value(style, &context, name, strlen(name), &text);
+    ck_assert_msg(error == (expected == NULL ? CSS_INVALID : CSS_OK), "%s (%s): error %d",
+        name, computed_value_cases[_i].declarations, error);
+    if (expected != NULL) {
+        ck_assert_msg(text != NULL && lwc_string_length(text) == strlen(expected) &&
+            memcmp(lwc_string_data(text), expected, strlen(expected)) == 0, "%s (%s): got %s, expected %s",
+            name, computed_value_cases[_i].declarations, text == NULL ? "NULL" : lwc_string_data(text), expected);
+        lwc_string_unref(text);
+    } else {
+        ck_assert_ptr_null(text);
+    }
+    destroy_select_ctx(&selected);
+}
+END_TEST
+
 Suite *layout_calc_suite(void)
 {
     Suite *s = suite_create("LayoutCalc");
     TCase *tc_core = tcase_create("Core");
+    tcase_add_loop_test(tc_core, test_computed_insets_preserve_values, 0, 5);
+    tcase_add_loop_test(tc_core, test_computed_value_serialization, 0,
+        sizeof(computed_value_cases) / sizeof(computed_value_cases[0]));
     tcase_add_loop_test(
         tc_core, test_background_layers, 0, sizeof(background_layer_cases) / sizeof(background_layer_cases[0]));
     tcase_add_loop_test(tc_core, test_invalid_background_layers, 0,
