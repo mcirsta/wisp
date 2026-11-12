@@ -13,7 +13,7 @@ int qjs_event_target_listen(JSContext *ctx, JSValueConst target, const char *typ
 enum qjs_handler_kind {
     QJS_HANDLER_SCROLL, QJS_HANDLER_RESIZE, QJS_HANDLER_LOAD, QJS_HANDLER_ERROR,
     QJS_HANDLER_READYSTATE, QJS_HANDLER_LOADSTART, QJS_HANDLER_PROGRESS,
-    QJS_HANDLER_ABORT, QJS_HANDLER_TIMEOUT, QJS_HANDLER_LOADEND, QJS_HANDLERS
+    QJS_HANDLER_ABORT, QJS_HANDLER_TIMEOUT, QJS_HANDLER_LOADEND, QJS_HANDLER_SCROLLEND, QJS_HANDLERS
 };
 /* IDL handlers share native listener ordering and GC ownership. The exposing
  * interface validates its receiver before calling these helpers. */

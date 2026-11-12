@@ -3779,18 +3779,56 @@ nserror browser_window_get_extents(struct browser_window *bw, bool scaled, int *
 /* Exported interface, documented in wisp/browser_window.h. */
 void browser_window_get_scroll(struct browser_window *bw, int *x, int *y)
 {
+    double dx, dy;
+    browser_window_get_scroll_position(bw, &dx, &dy);
+    *x = dx;
+    *y = dy;
+}
+
+void browser_window_get_scroll_position(struct browser_window *bw, double *x, double *y)
+{
     *x = *y = 0;
     if (bw == NULL)
         return;
     if (bw->window != NULL) {
-        if (guit->window->get_scroll(bw->window, x, y)) {
-            *x /= bw->scale;
-            *y /= bw->scale;
+        int sx, sy;
+        if (guit->window->get_scroll(bw->window, &sx, &sy)) {
+            *x = sx / (double)bw->scale;
+            *y = sy / (double)bw->scale;
         }
     } else {
         *x = scrollbar_get_offset(bw->scroll_x);
         *y = scrollbar_get_offset(bw->scroll_y);
     }
+}
+
+nserror browser_window_scroll_to(struct browser_window *bw, double x, double y)
+{
+    if (bw == NULL || bw->current_content == NULL)
+        return NSERROR_BAD_CONTENT;
+    int width, height;
+    nserror err = browser_window_get_dimensions(bw, &width, &height);
+    if (err != NSERROR_OK)
+        return err;
+    double scale = bw->window != NULL ? bw->scale : 1.0;
+    if (bw->window == NULL) {
+        if (bw->scroll_y != NULL)
+            width -= SCROLLBAR_WIDTH;
+        if (bw->scroll_x != NULL)
+            height -= SCROLLBAR_WIDTH;
+        width = fmax(0, width) / bw->scale;
+        height = fmax(0, height) / bw->scale;
+    }
+    double max_x = fmax(0, (double)content_get_width(bw->current_content) * scale - width);
+    double max_y = fmax(0, (double)content_get_height(bw->current_content) * scale - height);
+    /* Bound before converting: JS can supply any finite double. Keep room
+     * for the viewport's far edges in native integer-coordinate arithmetic. */
+    max_x = fmin(max_x, INT_MAX - fmax(0, width));
+    max_y = fmin(max_y, INT_MAX - fmax(0, height));
+    int sx = round(fmin(max_x, fmax(0, x * scale)));
+    int sy = round(fmin(max_y, fmax(0, y * scale)));
+    struct rect rect = {.x0 = sx, .y0 = sy, .x1 = sx, .y1 = sy};
+    return browser_window_set_scroll(bw, &rect);
 }
 
 void browser_window_scroll_changed(struct browser_window *bw)

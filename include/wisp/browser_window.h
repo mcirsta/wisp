@@ -292,6 +292,13 @@ nserror browser_window_get_dimensions(struct browser_window *bw, int *width, int
 /** Get the viewport scroll offset in unscaled content coordinates. */
 void browser_window_get_scroll(struct browser_window *bw, int *x, int *y);
 
+/** Scroll offsets in unscaled content coordinates, retaining zoom fractions. */
+void browser_window_get_scroll_position(struct browser_window *bw, double *x, double *y);
+
+/** Set absolute viewport offsets in unscaled content coordinates. Clamps to
+ * the native scrolling area and applies frontend zoom only at the boundary. */
+nserror browser_window_scroll_to(struct browser_window *bw, double x, double y);
+
 /** Frontends call after changing actual viewport offsets, including user scrolls.
  * Only queues delivery: never invokes JavaScript from a UI callback. */
 void browser_window_scroll_changed(struct browser_window *bw);

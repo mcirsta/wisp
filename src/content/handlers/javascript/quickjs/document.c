@@ -29,7 +29,8 @@ enum node_property {
     HEAD,
     BODY,
     READY_STATE,
-    DEFAULT_VIEW
+    DEFAULT_VIEW,
+    COMPAT_MODE
 };
 
 static JSValue wrap_result(JSContext *ctx, JSValueConst object, struct qjs_dom_node *self, dom_node *node)
@@ -116,6 +117,12 @@ static JSValue node_get(JSContext *ctx, JSValueConst object, int property)
     dom_node *node = NULL;
     bool nullable = true;
     switch (property) {
+    case COMPAT_MODE: {
+        dom_document_quirks_mode mode;
+        err = dom_document_get_quirks_mode(self->node, &mode);
+        return err == DOM_NO_ERR ? JS_NewString(ctx, mode == DOM_DOCUMENT_QUIRKS_MODE_FULL ? "BackCompat" : "CSS1Compat")
+                                : qjs_dom_exception(ctx, err);
+    }
     case DEFAULT_VIEW:
         /* Only this realm's displayed Document has a browsing context.
          * Clones and template owners have none, even if they contain nodes. */
@@ -416,6 +423,7 @@ int qjs_dom_install_properties(JSContext *ctx, JSValue *prototypes)
     };
     static const JSCFunctionListEntry document[] = {
         GET("readyState", READY_STATE),
+        GET("compatMode", COMPAT_MODE),
         GET("defaultView", DEFAULT_VIEW),
         GET("documentElement", DOCUMENT_ELEMENT),
         GET("head", HEAD),

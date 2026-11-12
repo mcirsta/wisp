@@ -546,7 +546,7 @@ JSValue qjs_event_handler_set(JSContext *ctx, JSValueConst object, JSValueConst 
     if (target == NULL)
         return JS_EXCEPTION;
     static const char *types[QJS_HANDLERS] = {"scroll", "resize", "load", "error",
-        "readystatechange", "loadstart", "progress", "abort", "timeout", "loadend"};
+        "readystatechange", "loadstart", "progress", "abort", "timeout", "loadend", "scrollend"};
     const char *type = types[kind];
     if (!JS_IsObject(value))
         value = JS_NULL;
@@ -713,6 +713,8 @@ int qjs_init_event_target(JSContext *ctx)
             "onscroll", window_handler_get, window_handler_set, 0, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE),
         JS_CGETSET_MAGIC_DEF2(
             "onresize", window_handler_get, window_handler_set, 1, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE),
+        JS_CGETSET_MAGIC_DEF2("onscrollend", window_handler_get, window_handler_set,
+            QJS_HANDLER_SCROLLEND, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE),
     };
     if (JS_IsException(proto) || JS_IsException(ctor) ||
         JS_SetPropertyFunctionList(

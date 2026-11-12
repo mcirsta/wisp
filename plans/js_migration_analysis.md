@@ -32,6 +32,63 @@ QuickJS checks pass in Release and sanitizer Debug; deterministic Qt tests cover
 the loader, cache/failures, resizing and navigation. See the linked plan for
 image counts, exact coverage and the broader APIs intentionally left separate.
 
+## eBihoreanul live galleries and Window scrolling (2026-11-12)
+
+Rechecked the live homepage and article `206522` (Crisul passage construction),
+using the site's unmodified `scripts.min_v202611122.js` and
+`stire.min_v202611122.js`. Evidence is under `out/ebihoreanul-2026-11-12/`.
+
+At `0198fcd8`, news images, the JS-created Foto Bihoreanul preview and thumbnail
+selection worked. Normal gallery clicks instead followed the raw gallery/JPEG
+URL. Native event tracing identified Fancybox's call to missing `window.scrollTo`
+in its overlay-lock code, before its handler reached `preventDefault()`.
+
+**Window scrolling is now implemented.** `scrollTo`, `scroll` and `scrollBy`
+share Web IDL conversion and the browser's native viewport scrolling. Supported
+forms include two numeric arguments and the options dictionary; omitted axes
+preserve their current position for absolute scrolling and mean zero delta for
+relative scrolling. Conversion order/errors, non-finite normalization, large
+finite coordinates, bounds, same-entry layout changes, native zoom fractions,
+HiDPI and retired documents are covered. Script changes carry `viewport.scroll`
+traces and reuse native repainting and deferred scroll notifications. Changed
+instant script scrolls also queue a bubbling document `scrollend`; no-op calls
+emit neither event.
+
+This targets the [published CSSOM View specification of 2025-09-16](https://www.w3.org/TR/2025/WD-cssom-view-1-20250916/#dom-window-scrollto),
+including its `undefined` return type. The newer editor's draft proposes
+Promise/ScrollResult returns; that extension is not exposed. Wisp uses the
+specification's permitted immediate scrolling for all valid behavior values,
+including `smooth`; it does not introduce animated scrolling. Coordinates use
+the engine's existing scrolling area and native pixel precision.
+
+The live retest exposed one further small prerequisite: **Document.compatMode**.
+Without it, jQuery chose the body's full height for Window measurements when
+opening a photo from the AJAX grid. The image loaded but its lightbox was
+centered at `top:5662px` in a 1000px viewport. The getter now reads libdom's real
+mode (`BackCompat` only for full quirks, `CSS1Compat` otherwise), including inert
+clones. Client dimensions likewise use that document mode, not the resource
+cache's inherited quirks flag. With this correction, the same photo is centered
+at `top:182px`. This follows the [DOM compatibility-mode contract](https://dom.spec.whatwg.org/#dom-document-compatmode);
+no site-specific script or geometry override is shipped.
+
+Live results with the native click path:
+
+- Homepage gallery grid opens and its images load; selecting a grid photo opens
+  the full image within the viewport. Closing either the grid or individual
+  image removes the overlay; changing the sidebar thumbnail and closing its
+  gallery preserves the original 513px scroll offset.
+- Article gallery opens, next/previous display the appropriate photos, and
+  closing removes the overlay while preserving the original 300px scroll offset.
+- Page captures reach completion. Advertising, consent and social-widget script
+  errors remain outside this gallery batch.
+
+Native regression checks cover conversions, receiver/lifetime rules, event flags
+and document modes/clones. `qt_js_scroll` covers actual scrolling, CSSOM reads,
+root locking, mutation/layout, zoom, HiDPI, event coalescing and all three HTML
+modes. Existing geometry, view-event, lazy-image, bounds and scroll-reuse checks
+provide regression coverage. Earlier direct `$.fancybox.open()` probes remain
+component tests; the live clicks above now exercise the overlay-lock path too.
+
 ## eBihoreanul follow-up assessment (2026-10-15)
 
 Assessed after `00f7ab3b`, using the live homepage and the Beius fire article,

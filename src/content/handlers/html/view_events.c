@@ -28,7 +28,7 @@ void html_view_events_cancel(html_content *html)
         free(event);
     }
     html->scroll_events_tail = NULL;
-    html->resize_event_pending = html->view_events_pending = false;
+    html->resize_event_pending = html->scroll_end_pending = html->view_events_pending = false;
 }
 
 static bool schedule_events(html_content *html)
@@ -39,6 +39,12 @@ static bool schedule_events(html_content *html)
         return false;
     html->view_events_pending = true;
     return true;
+}
+
+void html_queue_scroll_end(html_content *html)
+{
+    if (!html->aborted && html->jsthread != NULL && schedule_events(html))
+        html->scroll_end_pending = true;
 }
 
 void html_queue_scroll_event(html_content *html, dom_node *target)
@@ -82,7 +88,9 @@ static void view_events_task(void *pw)
     struct html_scroll_event *events = html->scroll_events;
     html->scroll_events = html->scroll_events_tail = NULL;
     bool resize = html->resize_event_pending;
+    bool scroll_end = html->scroll_end_pending;
     html->resize_event_pending = false;
+    html->scroll_end_pending = false;
     if (resize)
         js_fire_window_event(html->jsthread, corestring_dom_resize);
     while (events != NULL) {
@@ -93,6 +101,8 @@ static void view_events_task(void *pw)
         dom_node_unref(event->target);
         free(event);
     }
+    if (scroll_end && !html->aborted && generation == html->input_generation && html->jsthread != NULL)
+        js_fire_element_event(html->jsthread, (dom_node *)html->document, corestring_dom_scrollend);
     content_remove_user(&html->base, NULL, &generation);
 }
 

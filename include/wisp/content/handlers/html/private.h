@@ -198,7 +198,7 @@ typedef struct html_content {
     bool dom_content_loaded; /**< DOMContentLoaded has been dispatched. */
     bool lifecycle_pending, lifecycle_running; /**< Queued/running document lifecycle task. */
     struct html_scroll_event *scroll_events, *scroll_events_tail;
-    bool view_events_pending, resize_event_pending, view_dimensions_valid;
+    bool view_events_pending, resize_event_pending, scroll_end_pending, view_dimensions_valid;
     unsigned view_width, view_height; /**< Last viewport dimensions including native scrollbars. */
     bool conversion_begun; /**< Whether or not the conversion has begun */
     bool conversion_restart_pending; /**< Whether a restart is pending */

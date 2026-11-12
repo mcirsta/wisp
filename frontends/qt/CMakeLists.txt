@@ -161,6 +161,9 @@ if(BUILD_TESTING AND WISP_ENABLE_TESTS)
         add_test(NAME qt_js_geometry COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_js_geometry.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_js_geometry PROPERTIES TIMEOUT 45)
+        add_test(NAME qt_js_scroll COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_js_scroll.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_js_scroll PROPERTIES TIMEOUT 70)
         add_test(NAME qt_js_computed_style COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_js_computed_style.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_js_computed_style PROPERTIES TIMEOUT 30)

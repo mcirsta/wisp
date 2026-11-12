@@ -3,6 +3,7 @@
 #include "dom.h"
 #include <limits.h>
 #include <math.h>
+#include <string.h>
 #include <wisp/content.h>
 #include <wisp/content/content.h>
 #include <wisp/browser_window.h>
@@ -11,6 +12,7 @@
 #include <wisp/content/handlers/html/box_inspect.h>
 #include "content/handlers/html/box_construct.h"
 #include "content/handlers/html/box_geometry.h"
+#include "content/handlers/html/view_events.h"
 #include "desktop/scrollbar.h"
 
 /* No box from another/inert document, or from a detached subtree, is usable.
@@ -49,10 +51,15 @@ static JSValue client_size(JSContext *ctx, JSValueConst object, int vertical)
     jsthread *thread = JS_GetContextOpaque(ctx);
     html_content *html = thread->doc_priv;
     dom_node *root = NULL, *body = NULL;
+    dom_document_quirks_mode mode;
+    dom_exception dom_err = dom_document_get_quirks_mode(html->document, &mode);
+    if (dom_err != DOM_NO_ERR)
+        return qjs_dom_exception(ctx, dom_err);
+    bool quirks = mode == DOM_DOCUMENT_QUIRKS_MODE_FULL;
     dom_document_get_document_element(html->document, &root);
-    if (html->base.quirks)
+    if (quirks)
         dom_html_document_get_body(html->document, &body);
-    bool viewport = (!html->base.quirks && node->node == root) || (html->base.quirks && node->node == body);
+    bool viewport = (!quirks && node->node == root) || (quirks && node->node == body);
     dom_node_unref(root);
     dom_node_unref(body);
 
@@ -210,8 +217,8 @@ static JSValue window_measure(JSContext *ctx, JSValueConst object, int property)
         content_broadcast(&html->base, CONTENT_MSG_GETDIMS, &msg);
         pixels = property == INNER_WIDTH ? width : height;
     } else {
-        int x, y;
-        browser_window_get_scroll(html->bw, &x, &y);
+        double x, y;
+        browser_window_get_scroll_position(html->bw, &x, &y);
         pixels = property == SCROLL_X || property == PAGE_X_OFFSET ? x : y;
     }
     pixels *= 96.0 / FIXTOFLT(html->unit_len_ctx.device_dpi);
@@ -229,6 +236,112 @@ static JSValue window_measure_set(JSContext *ctx, JSValueConst object, JSValueCo
     int ret = JS_DefinePropertyValueStr(ctx, global, window_names[property], JS_DupValue(ctx, value), JS_PROP_C_W_E);
     JS_FreeValue(ctx, global);
     return ret < 0 ? JS_EXCEPTION : JS_UNDEFINED;
+}
+
+struct scroll_options {
+    double x, y;
+    bool has_x, has_y;
+};
+
+static int scroll_coordinate(JSContext *ctx, JSValueConst value, double *coordinate)
+{
+    if (JS_ToFloat64(ctx, coordinate, value) < 0)
+        return -1;
+    if (!isfinite(*coordinate))
+        *coordinate = 0;
+    return 0;
+}
+
+/* Web IDL overload resolution and dictionary conversion happen before reading
+ * the viewport. Getters/valueOf can mutate layout, scroll, or retire this realm. */
+static int scroll_options(JSContext *ctx, int argc, JSValueConst *argv, struct scroll_options *options)
+{
+    if (argc >= 2) {
+        options->has_x = options->has_y = true;
+        return scroll_coordinate(ctx, argv[0], &options->x) < 0 ? -1
+            : scroll_coordinate(ctx, argv[1], &options->y);
+    }
+    if (argc == 0 || JS_IsNull(argv[0]) || JS_IsUndefined(argv[0]))
+        return 0;
+    if (!JS_IsObject(argv[0])) {
+        JS_ThrowTypeError(ctx, "ScrollToOptions requires an object");
+        return -1;
+    }
+    /* Inherited dictionary members first, then members in lexical order. */
+    JSValue behavior = JS_GetPropertyStr(ctx, argv[0], "behavior");
+    if (JS_IsException(behavior))
+        return -1;
+    if (!JS_IsUndefined(behavior)) {
+        size_t length;
+        const char *text = JS_ToCStringLen(ctx, &length, behavior);
+        bool converted = text != NULL;
+        bool valid = text != NULL && ((length == 4 && memcmp(text, "auto", 4) == 0) ||
+            (length == 6 && memcmp(text, "smooth", 6) == 0) ||
+            (length == 7 && memcmp(text, "instant", 7) == 0));
+        JS_FreeCString(ctx, text);
+        JS_FreeValue(ctx, behavior);
+        if (!valid) {
+            if (converted)
+                JS_ThrowTypeError(ctx, "Invalid scroll behavior");
+            return -1;
+        }
+    } else {
+        JS_FreeValue(ctx, behavior);
+    }
+    const char *names[] = {"left", "top"};
+    for (unsigned i = 0; i < 2; i++) {
+        JSValue value = JS_GetPropertyStr(ctx, argv[0], names[i]);
+        if (JS_IsException(value))
+            return -1;
+        bool present = !JS_IsUndefined(value);
+        int ret = present ? scroll_coordinate(ctx, value, i == 0 ? &options->x : &options->y) : 0;
+        JS_FreeValue(ctx, value);
+        if (ret < 0)
+            return -1;
+        if (i == 0)
+            options->has_x = present;
+        else
+            options->has_y = present;
+    }
+    return 0;
+}
+
+/* CSSOM View, published 2025-09-16: scrollTo is equivalent to scroll.
+ * Wisp does not honor smooth scrolling, as permitted by section 3.1. All
+ * accepted behaviors use the same native instant scroll, never a no-op. */
+static JSValue window_scroll(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv, int relative)
+{
+    if (!window_receiver(ctx, object))
+        return JS_EXCEPTION;
+    struct scroll_options options = {0};
+    if (scroll_options(ctx, argc, argv, &options) < 0)
+        return JS_EXCEPTION;
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    html_content *html = thread && !thread->closed ? thread->doc_priv : NULL;
+    if (html == NULL || html->bw == NULL)
+        return JS_UNDEFINED;
+    qjs_dom_flush(thread);
+    nserror err = html_update_layout(html);
+    if (err != NSERROR_OK)
+        return err == NSERROR_NOMEM ? JS_ThrowOutOfMemory(ctx) : JS_ThrowInternalError(ctx, "Layout unavailable");
+    double before_x, before_y, after_x, after_y;
+    browser_window_get_scroll_position(html->bw, &before_x, &before_y);
+    double css_to_device = FIXTOFLT(html->unit_len_ctx.device_dpi) / 96.0;
+    double x = options.has_x ? options.x * css_to_device : (relative ? 0 : before_x);
+    double y = options.has_y ? options.y * css_to_device : (relative ? 0 : before_y);
+    if (relative) {
+        x += before_x;
+        y += before_y;
+    }
+    err = browser_window_scroll_to(html->bw, x, y);
+    if (err != NSERROR_OK)
+        return JS_ThrowInternalError(ctx, "Viewport scrolling unavailable");
+    browser_window_get_scroll_position(html->bw, &after_x, &after_y);
+    qjs_trace(ctx, "viewport.scroll", "relative=%d x=%g y=%g actual_x=%g actual_y=%g", relative,
+        x / css_to_device, y / css_to_device, after_x / css_to_device, after_y / css_to_device);
+    if (before_x != after_x || before_y != after_y)
+        html_queue_scroll_end(html);
+    return JS_UNDEFINED;
 }
 
 int qjs_dom_install_geometry(JSContext *ctx, JSValue *prototypes)
@@ -256,7 +369,18 @@ int qjs_dom_install_geometry(JSContext *ctx, JSValue *prototypes)
             return -1;
         }
     }
+    const char *methods[] = {"scroll", "scrollTo", "scrollBy"};
+    int ret = 0;
+    for (unsigned i = 0; i < sizeof(methods) / sizeof(*methods); i++) {
+        JSValue function = JS_NewCFunctionMagic(ctx, window_scroll, methods[i], 0, JS_CFUNC_generic_magic, i == 2);
+        if (JS_IsException(function) || JS_DefinePropertyValueStr(ctx, global, methods[i], function, JS_PROP_C_W_E) < 0) {
+            ret = -1;
+            break;
+        }
+    }
     JS_FreeValue(ctx, global);
+    if (ret < 0)
+        return -1;
     static const JSCFunctionListEntry properties[] = {
         JS_CGETSET_MAGIC_DEF2("clientWidth", client_size, NULL, 0, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE),
         JS_CGETSET_MAGIC_DEF2("clientHeight", client_size, NULL, 1, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE),

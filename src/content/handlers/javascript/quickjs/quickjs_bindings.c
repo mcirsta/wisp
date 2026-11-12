@@ -840,7 +840,8 @@ static bool js_fire_native_event(
                 if (!JS_IsException(event))
                     dom_event_init(qjs_event_get(ctx, event)->native, type,
                         (lifecycle && dom_ready) || (html != NULL && target == (dom_node *)html->document &&
-                            dom_string_isequal(type, corestring_dom_scroll)), false);
+                            (dom_string_isequal(type, corestring_dom_scroll) ||
+                                dom_string_isequal(type, corestring_dom_scrollend))), false);
             } else {
                 event = submit ? qjs_native_submit_event(ctx, type, document, submitter)
                                : qjs_native_input_event(ctx, type, mouse);
